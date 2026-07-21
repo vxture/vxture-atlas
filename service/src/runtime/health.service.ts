@@ -8,6 +8,12 @@
  */
 
 import { Inject, Injectable } from "@nestjs/common";
+import {
+  buildHealthIdentity,
+  serviceIdentity,
+  type HealthLiveResponse,
+  type ServiceIdentity,
+} from "@vxture/shared";
 
 import { ModelRegistryRepository } from "../registry/model-registry.repository";
 import type { AiModelRecord, ModelConfig } from "../types/runtime.types";
@@ -22,16 +28,12 @@ export interface HealthCheckResult {
   [key: string]: unknown;
 }
 
-export interface ModelPlatformLiveResponse {
-  status: "ok";
-  checkedAt: string;
-  service: "model-platform";
-}
+// Liveness + identity per standard 025.
+export type ModelPlatformLiveResponse = HealthLiveResponse;
 
-export interface ModelPlatformReadyResponse {
+// Readiness = identity block + per-dependency checks (standard 025 §3).
+export interface ModelPlatformReadyResponse extends ServiceIdentity {
   status: ReadinessStatus;
-  checkedAt: string;
-  service: "model-platform";
   checks: {
     database: HealthCheckResult;
     modelRegistry: HealthCheckResult;
@@ -49,11 +51,10 @@ export class ModelPlatformHealthService {
   ) {}
 
   live(): ModelPlatformLiveResponse {
-    return {
-      status: "ok",
-      checkedAt: new Date().toISOString(),
+    return buildHealthIdentity({
       service: "model-platform",
-    };
+      product: "vxture",
+    });
   }
 
   async ready(): Promise<ModelPlatformReadyResponse> {
@@ -70,6 +71,7 @@ export class ModelPlatformHealthService {
         : this.checkProviderKeys(modelRegistry.models as AiModelRecord[]);
 
     return {
+      ...serviceIdentity({ service: "model-platform", product: "vxture" }),
       status: resolveReadinessStatus([
         database,
         modelRegistry,
@@ -77,8 +79,6 @@ export class ModelPlatformHealthService {
         quotaRead,
         usageSummaryRead,
       ]),
-      checkedAt: new Date().toISOString(),
-      service: "model-platform",
       checks: {
         database,
         modelRegistry: omitPrivateCheckData(modelRegistry),
