@@ -1,0 +1,66 @@
+name: sonar
+
+# Non-blocking SonarCloud analysis. NOT one of the five required checks (see
+# docs/50-deployment/rebuild/main-ruleset.json) - this workflow exists to
+# supersede the SonarCloud GitHub App's automatic analysis, which was
+# reporting this repo under a stale project key (vxture_Model-Cortex - the
+# model-platform service's pre-Atlas internal codename, deprecated
+# 2026-07-24). Explicit CI-based analysis under the correct key
+# (sonar-project.properties) takes precedence once SonarCloud sees a scanner
+# run for the repo.
+#
+# continue-on-error until the `atlas` project's GitHub binding is confirmed
+# live on the SonarCloud side (owner action on sonarcloud.io, out of this
+# repo's scope) - remove once confirmed, mirroring the same stopgap
+# vxture-platform's ci.yml uses for its own Sonar job.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: sonar-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.ref_name) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable corepack (pnpm from packageManager)
+        run: corepack enable
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+
+      - name: Generate Prisma client
+        run: pnpm --filter @vxture/service-model-platform db:generate
+
+      - name: Run tests (coverage)
+        run: pnpm --filter @vxture/service-model-platform test:coverage
+
+      - name: SonarQube Scan
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
