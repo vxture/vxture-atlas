@@ -133,9 +133,18 @@ repo-split plan itself - not discovered later.
 - **What breaks**: `service/src/quota/quota.service.ts`,
   `service/src/metering/metering.service.ts`, and
   `service/src/registry/model-registry.repository.ts` still call
-  `prisma.tenantSubscriptionQuota`/`tenantUsageEvent`/`tenantUsageSummary` -
-  these will fail `type-check`/`build` immediately (the generated Prisma
-  client no longer has these models).
+  `prisma.tenantSubscriptionQuota`/`tenantUsageEvent`/`tenantUsageSummary`.
+  **Correction (2026-07-24)**: this no longer fails `type-check`/`build` - a
+  later commit added a hand-authored `ModelPlatformPrismaClient` interface
+  (`service/src/prisma.ts`) declaring these three delegates and type-asserts
+  the real generated `PrismaClient` onto it (`as unknown as
+  ModelPlatformPrismaClient`). The cast satisfies the compiler but the
+  generated client has no such properties (`service/prisma/schema.prisma`
+  only defines `ModelProvider`/`ModelDefinition`/`ModelGrant`/etc.) - calling
+  these three delegates still throws at runtime (`Cannot read properties of
+  undefined`). CI is green because nothing exercises that code path yet
+  (no test calls these three methods); the compile-time symptom described
+  above is gone, the underlying gap is not.
 - **Why this was left broken on purpose**: the correct fix is replacing these
   direct Prisma calls with the C2 entitlement client and C3 consume
   buffer/flush client (design in
