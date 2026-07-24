@@ -173,3 +173,149 @@ model ModelPolicy {
   @@map("model_policies")
   @@schema("model")
 }
+
+// ── key schema（provider 密钥，密文，DDL 权威 deploy/database/ddl/00_baseline.sql） ──
+// 迁移备注：这三个 schema（key/reqlog/routing）此前只在 DDL 中设计,现有服务代码从未连接;
+// 本次迁移补齐 Prisma 代理以保持 DDL<->Prisma 锁步(check-data-architecture.mjs),接入调用点
+// 留给后续开发任务(见 docs/60-operations/10-tech-debt.md)。
+
+model ProviderApiKey {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerCode    String    @map("provider_code") @db.VarChar(64)
+  keyAlias        String    @map("key_alias") @db.VarChar(128)
+  encryptedKey    Bytes     @map("encrypted_key")
+  encryptionKeyId String    @map("encryption_key_id") @db.VarChar(128)
+  keyScope        String    @default("shared") @map("key_scope") @db.VarChar(32)
+  isActive        Boolean   @default(true) @map("is_active")
+  lastRotatedAt   DateTime? @map("last_rotated_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  rotationLogs KeyRotationLog[]
+
+  @@unique([providerCode, keyAlias], map: "uq_provider_api_keys_code_alias")
+  @@index([providerCode], map: "idx_provider_api_keys_provider_code")
+  @@index([isActive], map: "idx_provider_api_keys_is_active")
+  @@map("provider_api_keys")
+  @@schema("key")
+}
+
+model KeyRotationLog {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerApiKeyId String   @map("provider_api_key_id") @db.Uuid
+  rotatedBy        String?  @map("rotated_by") @db.Uuid
+  reason           String?  @db.VarChar(512)
+  rotatedAt        DateTime @default(now()) @map("rotated_at") @db.Timestamptz(6)
+
+  providerApiKey ProviderApiKey @relation(fields: [providerApiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([providerApiKeyId, rotatedAt], map: "idx_key_rotation_logs_key")
+  @@map("key_rotation_logs")
+  @@schema("key")
+}
+
+// ── reqlog schema（高频 AI 请求 / 错误日志，按月分区，append-only） ──
+
+model RequestRecord {
+  id                     String   @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId              String   @map("request_id") @db.VarChar(128)
+  tenantId               String?  @map("tenant_id") @db.Uuid
+  workspaceId            String?  @map("workspace_id") @db.Uuid
+  productId              String?  @map("product_id") @db.Uuid
+  userId                 String?  @map("user_id") @db.Uuid
+  applicationId          String?  @map("application_id") @db.Uuid
+  applicationType        String?  @map("application_type") @db.VarChar(32)
+  agentId                String?  @map("agent_id") @db.Uuid
+  featureId              String?  @map("feature_id") @db.Uuid
+  downstreamIdentityHash String?  @map("downstream_identity_hash") @db.VarChar(128)
+  modelCode              String?  @map("model_code") @db.VarChar(128)
+  providerCode           String?  @map("provider_code") @db.VarChar(64)
+  inputTokens            BigInt?  @map("input_tokens")
+  outputTokens           BigInt?  @map("output_tokens")
+  totalTokens            BigInt?  @map("total_tokens")
+  latencyMs              Int?     @map("latency_ms")
+  usageType              String?  @map("usage_type") @db.VarChar(16)
+  status                 String?  @db.VarChar(32)
+  businessId             String?  @map("business_id") @db.VarChar(128)
+  billedMetricKey        String?  @map("billed_metric_key") @db.VarChar(64)
+  billedAmount           BigInt?  @map("billed_amount")
+  usageEventId           String?  @map("usage_event_id") @db.Uuid
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([id, createdAt])
+  @@index([requestId], map: "idx_request_records_request_id")
+  @@index([usageEventId], map: "idx_request_records_usage_event_id")
+  @@index([tenantId], map: "idx_request_records_tenant_id")
+  @@map("request_records")
+  @@schema("reqlog")
+}
+
+model ErrorRecord {
+  id           String   @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId    String?  @map("request_id") @db.VarChar(128)
+  providerCode String?  @map("provider_code") @db.VarChar(64)
+  modelCode    String?  @map("model_code") @db.VarChar(128)
+  errorCode    String?  @map("error_code") @db.VarChar(64)
+  errorMessage String?  @map("error_message") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([id, createdAt])
+  @@index([requestId], map: "idx_error_records_request_id")
+  @@index([errorCode], map: "idx_error_records_error_code")
+  @@map("error_records")
+  @@schema("reqlog")
+}
+
+// ── routing schema（连接 / 路由 / 降级配置） ──
+
+model ProviderConfig {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  providerCode String    @unique(map: "uq_provider_configs_provider_code") @map("provider_code") @db.VarChar(64)
+  endpointUrl  String    @map("endpoint_url") @db.Text
+  timeoutMs    Int?      @map("timeout_ms")
+  retryPolicy  Json?     @map("retry_policy") @db.JsonB
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([isActive], map: "idx_provider_configs_is_active")
+  @@index([deletedAt], map: "idx_provider_configs_deleted_at")
+  @@map("provider_configs")
+  @@schema("routing")
+}
+
+model ModelRoute {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelCode    String    @map("model_code") @db.VarChar(128)
+  providerCode String    @map("provider_code") @db.VarChar(64)
+  weight       Int       @default(100)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@unique([modelCode, providerCode], map: "uq_model_routes_model_provider")
+  @@index([modelCode], map: "idx_model_routes_model_code")
+  @@index([isActive], map: "idx_model_routes_is_active")
+  @@index([deletedAt], map: "idx_model_routes_deleted_at")
+  @@map("model_routes")
+  @@schema("routing")
+}
+
+model FallbackRule {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelCode          String    @unique(map: "uq_fallback_rules_model_code") @map("model_code") @db.VarChar(128)
+  fallbackModelCodes String[]  @default([]) @map("fallback_model_codes")
+  condition          String?   @db.VarChar(64)
+  isActive           Boolean   @default(true) @map("is_active")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([modelCode], map: "idx_fallback_rules_model_code")
+  @@index([isActive], map: "idx_fallback_rules_is_active")
+  @@index([deletedAt], map: "idx_fallback_rules_deleted_at")
+  @@map("fallback_rules")
+  @@schema("routing")
+}
