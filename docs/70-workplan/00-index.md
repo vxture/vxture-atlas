@@ -11,7 +11,7 @@ routers, seed-catalog, docs updates, old-code removal) is tracked there.
 |------|-----------|-------|
 | Governance base (root files, secret hygiene, SCA gate, docs skeleton, guardrails) | `check-docs-numbering.mjs --strict` exit 0; `gitleaks detect` 0 hits; osv scan clean | **done 2026-07-24** - real `pnpm-lock.yaml` generated, `--allow-no-lockfiles` removed |
 | CI/CD workflows (`ci`/`build`/`deploy`/`db-init`/`rollback`/`secret-scan`/`codeql` + `tailnet-ssh-connect`) | workflows parse (`check-workflows.mjs --strict`); job names match the five required-check contexts | **done 2026-07-24** - all five required checks green on `main`; ruleset applied |
-| `deploy/database/ddl/{00_baseline,97_service_role,98_column_locks}.sql` | `check-data-architecture.mjs --strict` (DDL <-> Prisma lockstep) once `service/prisma/schema.prisma` lands | DDL written; Prisma lockstep unverified until Phase 4 |
+| `deploy/database/ddl/{00_baseline,97_service_role,98_column_locks}.sql` | `check-data-architecture.mjs --strict` (DDL <-> Prisma lockstep) once `service/prisma/schema.prisma` lands | **verified 2026-07-24** - lockstep guardrail passes (14 tables), AND actually applied against a real throwaway Postgres 18 container (not just name-matched): all three DDL files apply cleanly with zero errors; the generated Prisma client round-trips create/upsert/delete through `atlas_svc` (the least-privilege role, not superuser); column locks are enforced by Postgres itself, not just documented - confirmed `atlas_svc` can update whitelisted columns, is rejected updating identity columns (`workspace_id`) and the append-only `webhook_deliveries` table entirely |
 
 ## Phase 2 - data-layer migration (owner-gated live-DB work)
 
