@@ -15,10 +15,10 @@ repo-split plan itself - not discovered later.
 
 | ID | Title | Opened | Status |
 |----|-------|--------|--------|
-| TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | open - awaiting owner host assignment |
+| TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); secrets/GitHub Environment/registry mirror still open |
 | TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocks C3 consume wiring (Phase 3) |
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | open - v0.1 design drafted (`docs/30-design/200-s2s-provider-surface.md`); rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
-| TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | open - needs S2S token exchange before cross-repo network exposure (Phase 5) |
+| TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | open - will fail `type-check`/`build` until Phase 3 replaces these direct Prisma calls with C2/C3 network clients |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
@@ -39,6 +39,15 @@ repo-split plan itself - not discovered later.
   once a dedicated beta server exists.
 - **Report to platform line**: this is the single open item the repo-split
   plan explicitly flags as requiring owner decision, not agent action.
+- **Progress (2026-07-24)**: owner confirmed the host assignment - worker-02
+  (`100.76.219.48`), port 3100 (fixed, inherited from the in-monorepo
+  service - not a fresh app-profile port pair), `stack_root=/srv/md0/atlas`,
+  tailnet class 2. Reflected in `docs/50-deployment/00-index.md`. **Still
+  open**: mirroring this into vxture-platform's own
+  `docs/50-deployment/13-infra-allocation-registry.md` product row (a
+  different repo, out of this session's write-scope); real `DEPLOY_*`/ACR/
+  tailscale secrets; the `production` GitHub Environment itself; the beta
+  tier (still dormant, no dedicated beta host).
 
 ## TD-002 - usage-metering write path is a no-op
 
@@ -99,6 +108,19 @@ repo-split plan itself - not discovered later.
   auth (product_210 token exchange, since Atlas has no legacy
   `AUTH_INTERNAL_TOKEN` history to be backward-compatible with) before the
   BFFs are pointed at Atlas's real network address.
+- **Progress (2026-07-24)**: the Atlas-side callee half is implemented -
+  `S2sAuthGuard` (`service/src/runtime/guards/s2s-auth.guard.ts`) verifies the
+  RS256 S2S token per product_210 §3.3's eight rules (RS256-only, `kid`-based
+  JWKS lookup via `jose`'s cached remote JWKS set, exact `iss` match, `aud`
+  match against `S2S_AUDIENCE`, `exp` with 60s skew, required `act.sub`; rules
+  7/8 hold by construction - the guard never reads `x-vxture-internal-auth`
+  and only derives org/workspace context from verified claims, never from
+  headers/body). Applied to `ModelRuntimeController` and
+  `ModelAdminController` (the two route groups this entry names as
+  unguarded). **Still open**: the platform-side token-exchange endpoint
+  issuing these tokens and the `bff/admin-bff`/`bff/console-bff`/
+  `agent-server/varda` callers that must send them - that half lives in
+  `vxture-platform`, out of scope for this pass.
 
 ## TD-005 - service code references Prisma models removed by the DB split
 

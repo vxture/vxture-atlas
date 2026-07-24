@@ -1,12 +1,13 @@
 name: deploy
 
 # Tag-triggered production deploy. A v*.*.* tag builds the image and deploys the
-# production stack on the host assigned in vxture-platform's
-# docs/50-deployment/00-index.md infra-allocation registry (unassigned as of
-# this scaffold - see docs/70-workplan/00-index.md), stack root
-# /srv/md0/atlas, published port 3100 (unchanged from the in-monorepo
-# service). The production GitHub Environment carries a required-reviewer
-# gate, so the deploy job pauses until approved.
+# production stack on worker-02 (100.76.219.48, owner-confirmed 2026-07-24 -
+# see docs/50-deployment/00-index.md and docs/70-workplan/00-index.md Phase 6),
+# stack root /srv/md0/atlas, published port 3100 (fixed, inherited from the
+# in-monorepo service). The production GitHub Environment carries a
+# required-reviewer gate, so the deploy job pauses until approved. Still
+# blocked on real DEPLOY_*/ACR/tailscale secrets and the Environment itself -
+# not yet exercised.
 #
 # BETA TIER PENDING (140-repo-governance-standard.md section 4): beta +
 # production is the standard two-tier model for every vxture product. Only the

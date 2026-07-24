@@ -8,8 +8,10 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 
+import { S2sAuthGuard } from "./guards/s2s-auth.guard";
 import {
   ModelAdminService,
   type AiModelAdminRecord,
@@ -33,6 +35,7 @@ import {
 import type { ApplicationType } from "../types/runtime.types";
 
 @Controller("model-platform/admin")
+@UseGuards(S2sAuthGuard)
 export class ModelAdminController {
   constructor(
     @Inject(ModelAdminService) private readonly admin: ModelAdminService,
