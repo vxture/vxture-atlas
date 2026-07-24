@@ -101,6 +101,85 @@ export interface IModelProvider {
   readonly providerName: string;
   chat(request: ProviderChatRequest): Promise<ProviderChatResponse>;
   chatStream(request: ProviderChatRequest): AsyncGenerator<StreamEvent>;
+  // S2S provider surface (A1/A2/A3, TD-003, docs/30-design/200-s2s-provider-surface.md).
+  // BaseProvider gives these a default "not implemented" throw (same pattern as
+  // chatStream) - no concrete provider implements them yet, that is a separate
+  // product/model-selection decision, not part of this interface's contract.
+  embed(request: ProviderEmbedRequest): Promise<ProviderEmbedResponse>;
+  rerank(request: ProviderRerankRequest): Promise<ProviderRerankResponse>;
+  parseDocument(request: ProviderParseRequest): Promise<ProviderParseResponse>;
+}
+
+// ── A1 embedding ──────────────────────────────────────────────────────────────
+
+export interface ProviderEmbedRequest {
+  endpointUrl: string;
+  apiKey: string;
+  modelCode: string;
+  texts: string[];
+  config?: ModelConfig;
+}
+
+export interface ProviderEmbedResponse {
+  modelVersion: string;
+  dimension: number;
+  vectors: number[][];
+}
+
+// ── A2 parse (layout / OCR / table / formula) ──────────────────────────────────
+
+export type ParseTask = "layout" | "ocr" | "table" | "formula";
+
+export interface ProviderParsePage {
+  pageIndex: number;
+  imageRef?: string;
+  imageBase64?: string;
+  regions?: unknown[];
+}
+
+export interface ProviderParseRequest {
+  endpointUrl: string;
+  apiKey: string;
+  modelCode: string;
+  task: ParseTask;
+  pages: ProviderParsePage[];
+  config?: ModelConfig;
+}
+
+export type ProviderParseResponse =
+  | { task: "layout"; blocks: Array<{ bbox: number[]; blockType: string }> }
+  | { task: "ocr"; spans: Array<{ bbox: number[]; text: string }> }
+  | {
+      task: "table";
+      rows: number;
+      cols: number;
+      cells: Array<{
+        rowSpan: number;
+        colSpan: number;
+        text: string;
+        bbox: number[];
+      }>;
+    }
+  | { task: "formula"; latex: string; bbox: number[] };
+
+// ── A3 rerank ───────────────────────────────────────────────────────────────
+
+export interface ProviderRerankCandidate {
+  id: string;
+  text: string;
+}
+
+export interface ProviderRerankRequest {
+  endpointUrl: string;
+  apiKey: string;
+  modelCode: string;
+  query: string;
+  candidates: ProviderRerankCandidate[];
+  config?: ModelConfig;
+}
+
+export interface ProviderRerankResponse {
+  scores: Array<{ id: string; score: number }>;
 }
 
 export interface ProviderChatRequest {

@@ -2,8 +2,24 @@ import type {
   IModelProvider,
   ProviderChatRequest,
   ProviderChatResponse,
+  ProviderEmbedRequest,
+  ProviderEmbedResponse,
+  ProviderParseRequest,
+  ProviderParseResponse,
+  ProviderRerankRequest,
+  ProviderRerankResponse,
   StreamEvent,
 } from "../types/runtime.types";
+
+export class ProviderCapabilityNotImplementedError extends Error {
+  constructor(
+    readonly providerName: string,
+    readonly capability: "embed" | "rerank" | "parseDocument",
+  ) {
+    super(`${providerName} does not implement ${capability} yet`);
+    this.name = "ProviderCapabilityNotImplementedError";
+  }
+}
 
 export class ProviderHttpError extends Error {
   constructor(
@@ -27,6 +43,29 @@ export abstract class BaseProvider implements IModelProvider {
     _request: ProviderChatRequest,
   ): AsyncGenerator<StreamEvent> {
     throw new Error(`${this.providerName} stream chat is not enabled yet`);
+  }
+
+  // S2S provider surface (A1/A2/A3, TD-003) - default "not implemented" throw, same
+  // pattern as chatStream. Which provider/model backs each capability is a product/
+  // cost decision (docs/30-design/200-s2s-provider-surface.md), not decided here - a
+  // concrete provider overrides the relevant method once that decision is made.
+  async embed(_request: ProviderEmbedRequest): Promise<ProviderEmbedResponse> {
+    throw new ProviderCapabilityNotImplementedError(this.providerName, "embed");
+  }
+
+  async rerank(
+    _request: ProviderRerankRequest,
+  ): Promise<ProviderRerankResponse> {
+    throw new ProviderCapabilityNotImplementedError(this.providerName, "rerank");
+  }
+
+  async parseDocument(
+    _request: ProviderParseRequest,
+  ): Promise<ProviderParseResponse> {
+    throw new ProviderCapabilityNotImplementedError(
+      this.providerName,
+      "parseDocument",
+    );
   }
 
   protected async postJson<TResponse>(

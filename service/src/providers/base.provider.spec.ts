@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 
-import { joinEndpoint, parseJson } from "./base.provider";
+import {
+  BaseProvider,
+  ProviderCapabilityNotImplementedError,
+  joinEndpoint,
+  parseJson,
+} from "./base.provider";
+import type {
+  ProviderChatRequest,
+  ProviderChatResponse,
+} from "../types/runtime.types";
 
 // ── joinEndpoint ──────────────────────────────────────────────────────────────
 
@@ -69,5 +78,71 @@ describe("parseJson", () => {
 
   it("throws on invalid JSON", () => {
     expect(() => parseJson("{bad json}")).toThrow();
+  });
+});
+
+// ── BaseProvider S2S capability defaults (TD-003) ──────────────────────────────
+
+class StubProvider extends BaseProvider {
+  readonly providerName = "stub";
+
+  chat(_request: ProviderChatRequest): Promise<ProviderChatResponse> {
+    throw new Error("not used in this test");
+  }
+}
+
+describe("BaseProvider default S2S capabilities (embed/rerank/parseDocument)", () => {
+  const provider = new StubProvider();
+
+  it("embed throws ProviderCapabilityNotImplementedError by default", async () => {
+    await expect(
+      provider.embed({
+        endpointUrl: "https://example.com",
+        apiKey: "",
+        modelCode: "m",
+        texts: ["hi"],
+      }),
+    ).rejects.toThrow(ProviderCapabilityNotImplementedError);
+  });
+
+  it("rerank throws ProviderCapabilityNotImplementedError by default", async () => {
+    await expect(
+      provider.rerank({
+        endpointUrl: "https://example.com",
+        apiKey: "",
+        modelCode: "m",
+        query: "q",
+        candidates: [{ id: "1", text: "a" }],
+      }),
+    ).rejects.toThrow(ProviderCapabilityNotImplementedError);
+  });
+
+  it("parseDocument throws ProviderCapabilityNotImplementedError by default", async () => {
+    await expect(
+      provider.parseDocument({
+        endpointUrl: "https://example.com",
+        apiKey: "",
+        modelCode: "m",
+        task: "ocr",
+        pages: [{ pageIndex: 0, imageRef: "ref" }],
+      }),
+    ).rejects.toThrow(ProviderCapabilityNotImplementedError);
+  });
+
+  it("names the provider and capability in the error", async () => {
+    try {
+      await provider.embed({
+        endpointUrl: "https://example.com",
+        apiKey: "",
+        modelCode: "m",
+        texts: ["hi"],
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProviderCapabilityNotImplementedError);
+      const typed = error as ProviderCapabilityNotImplementedError;
+      expect(typed.providerName).toBe("stub");
+      expect(typed.capability).toBe("embed");
+    }
   });
 });

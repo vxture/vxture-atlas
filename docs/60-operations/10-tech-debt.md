@@ -17,7 +17,7 @@ repo-split plan itself - not discovered later.
 |----|-------|--------|--------|
 | TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); secrets/GitHub Environment/registry mirror still open |
 | TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocked on platform `product.agent_catalog` (see TD-005 progress note), not just C3 consume wiring |
-| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | open - v0.1 design drafted (`docs/30-design/200-s2s-provider-surface.md`); rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
+| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
 
@@ -103,6 +103,29 @@ repo-split plan itself - not discovered later.
   A3.3 (rerank latency) and A2.3 (parse deployment affinity) remain genuinely
   open - they need a real benchmark and a host assignment respectively, not a
   design decision, and the draft reply says so honestly instead of guessing.
+- **Progress (2026-07-24) - contract layer implemented**: `POST /v1/embed`
+  (`service/src/embedding/`), `POST /v1/rerank` (`service/src/rerank/`), and
+  `POST /v1/parse` (`service/src/parse/`) are real, guarded (`S2sAuthGuard`),
+  request-validated endpoints that resolve the model via
+  `ModelRegistryService`, gate through `QuotaService.assertAllowed` (grant +
+  fail-open quota, same path chat uses), and route to a provider via
+  `ModelRouterService` - exactly like the chat path. A3.2's candidate-pool
+  limit (100) is enforced server-side, rejecting with `CANDIDATE_POOL_TOO_LARGE`
+  rather than silently truncating. The G1 error envelope
+  (`ModelRuntimeException`/`ModelRuntimeErrorResponse`) gained the new codes
+  this surface needs (`QUOTA_EXHAUSTED`, `RATE_LIMITED`,
+  `CANDIDATE_POOL_TOO_LARGE`, `RERANK_UNAVAILABLE`, `MODEL_NOT_IMPLEMENTED`).
+  **What's still a stub, deliberately**: no provider implements the actual
+  `embed`/`rerank`/`parseDocument` upstream call - `BaseProvider` gives each a
+  default throw (`ProviderCapabilityNotImplementedError`, same pattern as
+  `chatStream`'s existing default), which these endpoints map to a real `501
+  MODEL_NOT_IMPLEMENTED` response. Which provider/model backs each capability
+  is a product/cost decision, explicitly out of scope for this pass (per this
+  doc's own framing - see `docs/30-design/200-s2s-provider-surface.md`).
+  `RATE_LIMITED` (real rate-limiting against `model_policies`) and
+  `RERANK_UNAVAILABLE`'s fast-fail-on-unhealthy-provider signal are not
+  implemented either - both need a real provider integration to have
+  anything to rate-limit or degrade, so they follow once a provider is chosen.
 
 ## TD-004 - BFF-to-service auth is unauthenticated
 

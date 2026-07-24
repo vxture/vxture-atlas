@@ -3,6 +3,7 @@ import { BadRequestException, HttpStatus, Logger } from "@nestjs/common";
 
 import { ModelRuntimeService } from "./runtime.service";
 import { ModelRuntimeException } from "./runtime.errors";
+import { resolveApiKey } from "./resolve-api-key";
 import type { AiModelRecord, ChatRequest } from "../types/runtime.types";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -33,9 +34,7 @@ const svc = new ModelRuntimeService(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const validate = (req: unknown): void => (svc as any).validateChatRequest(req);
 
-const resolveKey = (model: AiModelRecord): string =>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (svc as any).resolveApiKey(model) as string;
+const resolveKey = (model: AiModelRecord): string => resolveApiKey(model);
 
 function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
   return {
