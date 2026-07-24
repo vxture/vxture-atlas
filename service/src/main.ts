@@ -11,7 +11,11 @@ async function bootstrap(): Promise<void> {
   loadRootEnv();
   await prisma.$connect();
 
-  const app = await NestFactory.create(ModelPlatformModule);
+  // rawBody: true - the provisioning webhook (POST /provisioning/webhook) must
+  // verify its HMAC signature over the exact raw request bytes, not a
+  // re-serialized JSON.stringify(parsedBody) (docs/30-design/identity/080-rp-integration.md
+  // section 4 step 1). Nest/Express exposes this as req.rawBody when enabled.
+  const app = await NestFactory.create(ModelPlatformModule, { rawBody: true });
   app.enableCors();
 
   const port = Number(process.env.MODEL_PLATFORM_PORT ?? 3100);

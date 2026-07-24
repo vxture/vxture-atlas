@@ -6,23 +6,20 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["key", "reqlog", "routing", "model"]
+  schemas  = ["key", "reqlog", "routing", "model", "provisioning"]
 }
 
 // Atlas 拆仓迁移（2026-07-24）：本库现为独立物理库 vxturestudio_modelruntime_main，
 // 与平台库 vxturestudio_platform_main 零跨库 FK（边界#1，见拆仓计划 Phase 2）。
 // DDL 权威在本仓 deploy/database/ddl/00_baseline.sql。
 //
-// TD-002/TD-005（本次迁移只搬迁数据模型边界，不改代码——业务逻辑改造转交后续开发任务）：
-//   原 metering.quota_pools / usage_events / usage_summary_months 三个 Prisma 代理模型已随本次
-//   物理分库移除——它们是**平台库**的 schema，Atlas 拆仓后不再直连，必须改经 C2 entitlement /
-//   C3 consume 网络契约访问（见 docs/30-design/200-s2s-provider-surface.md，及平台仓拆仓计划
-//   Phase 2/3）。src/quota/quota.service.ts、src/metering/metering.service.ts、
-//   src/registry/model-registry.repository.ts 中对 prisma.tenantSubscriptionQuota /
-//   tenantUsageEvent / tenantUsageSummary 的直接查询，在本次迁移后**将编译失败**——这是有意的：
-//   这些调用点必须被替换为 C2/C3 客户端调用，而不是继续代理到一个不再存在于本库的 schema。
-//   本次迁移不做这个替换（业务逻辑改造，转交后续开发任务），只确保数据模型边界迁移彻底、
-//   不留半个脚踩在平台库上的默认状态。
+// TD-002/TD-005：原 metering.quota_pools / usage_events / usage_summary_months 三个 Prisma
+//   代理模型已随物理分库移除——它们是**平台库**的 schema，Atlas 拆仓后不再直连。
+//   **更新（2026-07-24）**：src/quota/quota.service.ts、src/registry/model-registry.repository.ts
+//   中对应的直接查询已改为 fail-open（查不到配额源就有界放行，对齐平台
+//   data_model_200_schema.md §3 doctrine），不再编译失败也不再运行时崩溃——但这不是真正的
+//   C2 entitlement / C3 consume 网络对接，那部分仍卡在平台侧 product.agent_catalog 未落地
+//   （见 docs/60-operations/10-tech-debt.md TD-002/TD-005 进度记录）。
 
 // ── model schema（模型治理配置，DDL 权威 deploy/database/ddl/00_baseline.sql） ──
 
@@ -318,4 +315,38 @@ model FallbackRule {
   @@index([deletedAt], map: "idx_fallback_rules_deleted_at")
   @@map("fallback_rules")
   @@schema("routing")
+}
+
+// ── provisioning schema (C3 provisioning webhook receiver state, TD-003) ──
+
+model WorkspaceProvisioning {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  tenantId         String?   @map("tenant_id") @db.Uuid
+  productCode      String    @default("atlas") @map("product_code") @db.VarChar(64)
+  status           String    @default("pending") @db.VarChar(32)
+  seq              BigInt    @default(0)
+  provisionedAt    DateTime? @map("provisioned_at") @db.Timestamptz(6)
+  deprovisionedAt  DateTime? @map("deprovisioned_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([workspaceId, productCode], map: "uq_workspace_provisionings_workspace_product")
+  @@index([status], map: "idx_workspace_provisionings_status")
+  @@map("workspace_provisionings")
+  @@schema("provisioning")
+}
+
+model WebhookDelivery {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deliveryId  String   @unique(map: "uq_webhook_deliveries_delivery_id") @map("delivery_id") @db.VarChar(128)
+  workspaceId String   @map("workspace_id") @db.Uuid
+  productCode String   @default("atlas") @map("product_code") @db.VarChar(64)
+  eventType   String   @map("event_type") @db.VarChar(64)
+  seq         BigInt
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([workspaceId, seq], map: "idx_webhook_deliveries_workspace")
+  @@map("webhook_deliveries")
+  @@schema("provisioning")
 }

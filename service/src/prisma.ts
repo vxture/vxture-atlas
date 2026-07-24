@@ -31,6 +31,31 @@ export type AiModelRow = Omit<AiModelRecord, "provider"> & {
   providerRef?: { providerCode: string } | null;
 };
 
+/** provisioning.workspace_provisionings row (TD-003, C3 provisioning webhook receiver). */
+export interface WorkspaceProvisioningRow {
+  id: string;
+  workspaceId: string;
+  tenantId: string | null;
+  productCode: string;
+  status: string;
+  seq: bigint;
+  provisionedAt: Date | null;
+  deprovisionedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** provisioning.webhook_deliveries row (append-only idempotency ledger). */
+export interface WebhookDeliveryRow {
+  id: string;
+  deliveryId: string;
+  workspaceId: string;
+  productCode: string;
+  eventType: string;
+  seq: bigint;
+  receivedAt: Date;
+}
+
 type PrismaArgs = Record<string, unknown>;
 
 interface PrismaMutationResult {
@@ -52,6 +77,8 @@ export interface ModelPlatformPrismaClient {
   modelGrant: PrismaDelegate<AiModelGrantRecord>;
   modelPriceRule: PrismaDelegate<ModelPriceRuleRecord>;
   modelPolicy: PrismaDelegate<ModelPolicyRecord>;
+  workspaceProvisioning: PrismaDelegate<WorkspaceProvisioningRow>;
+  webhookDelivery: PrismaDelegate<WebhookDeliveryRow>;
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
   $transaction<T>(

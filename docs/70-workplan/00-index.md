@@ -41,6 +41,22 @@ replaced them with the platform's own documented fail-open doctrine
 a stopgap, not Phase 3 completion; real C2/C3 wiring still needs to happen
 once `product.agent_catalog` lands.
 
+**S2S provider surface (embed/parse/rerank) - contract layer done 2026-07-24**:
+see TD-003 progress note. Real provider integration still open (product/cost
+decision).
+
+**C3 provisioning webhook - done 2026-07-24**: `POST /provisioning/webhook`
+implemented per `docs/30-design/identity/080-rp-integration.md` §4/§5 (the
+same wire contract already live in production for arda) - HMAC-SHA256
+verification over the raw request body with dual-secret rotation support,
+idempotent delivery handling, per-workspace monotonic `seq` ordering, and
+record-only status persistence (`provisioning.workspace_provisionings` /
+`provisioning.webhook_deliveries`, new schema in this repo's own DB - no
+platform-side dependency). Deliberately does not create/tear down any
+per-workspace schema, unlike an asset-face product - Atlas's data model is
+global (model/grant/quota), not workspace-scoped, so there is nothing else to
+provision on receipt of this event today.
+
 ## Phase 4 - extraction mechanics
 
 `git filter-repo`/`subtree split` of `services/model/platform` from

@@ -11,7 +11,7 @@ BEGIN
   END IF;
 END $$;
 
-GRANT USAGE ON SCHEMA key, reqlog, routing, model TO atlas_svc;
+GRANT USAGE ON SCHEMA key, reqlog, routing, model, provisioning TO atlas_svc;
 
-GRANT SELECT, INSERT, DELETE ON ALL TABLES IN SCHEMA key, reqlog, routing, model
+GRANT SELECT, INSERT, DELETE ON ALL TABLES IN SCHEMA key, reqlog, routing, model, provisioning
   TO atlas_svc;
