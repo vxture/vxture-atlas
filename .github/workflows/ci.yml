@@ -122,11 +122,11 @@ jobs:
           # "all" - every org repo's Actions can read it).
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
-      - name: Type-check
-        run: pnpm type-check:all
-
       - name: Generate Prisma client
         run: pnpm --filter @vxture/service-model-platform db:generate
+
+      - name: Type-check
+        run: pnpm type-check:all
 
       - name: Build service (esbuild bundle)
         run: pnpm build
