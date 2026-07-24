@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const repoRoot = resolve(packageRoot, '../../..');
+const repoRoot = resolve(packageRoot, '..');
 const args = process.argv.slice(2);
 
 loadEnvFile(resolve(repoRoot, '.env.local'));

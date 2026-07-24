@@ -7,7 +7,7 @@
   "types": "src/index.ts",
   "description": "Vxture Model Platform - model registry, routing, quota and metering",
   "scripts": {
-    "build": "pnpm -w build:backend-deps && esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/main.cjs --tsconfig=tsconfig.json --external:@nestjs/websockets/socket-module --external:@nestjs/microservices --external:@nestjs/microservices/microservices-module --external:@prisma/client",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/main.cjs --tsconfig=tsconfig.json --external:@nestjs/websockets/socket-module --external:@nestjs/microservices --external:@nestjs/microservices/microservices-module --external:@prisma/client",
     "dev": "pnpm run build && node dist/main.cjs",
     "start": "node dist/main.cjs",
     "test": "vitest run",
@@ -23,8 +23,6 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.0.0",
     "@prisma/client": "^6.0.0",
-    "@vxture/core-config": "workspace:*",
-    "@vxture/shared": "workspace:*",
     "prom-client": "^15.1.3",
     "reflect-metadata": "^0.2.0"
   },

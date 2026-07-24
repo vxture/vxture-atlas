@@ -19,6 +19,7 @@ repo-split plan itself - not discovered later.
 | TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocks C3 consume wiring (Phase 3) |
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | open - v0.1 design drafted (`docs/30-design/200-s2s-provider-surface.md`); rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | open - needs S2S token exchange before cross-repo network exposure (Phase 5) |
+| TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | open - will fail `type-check`/`build` until Phase 3 replaces these direct Prisma calls with C2/C3 network clients |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -98,3 +99,28 @@ repo-split plan itself - not discovered later.
   auth (product_210 token exchange, since Atlas has no legacy
   `AUTH_INTERNAL_TOKEN` history to be backward-compatible with) before the
   BFFs are pointed at Atlas's real network address.
+
+## TD-005 - service code references Prisma models removed by the DB split
+
+- **What happened**: the physical-DB migration (this repo-split's Phase 2)
+  removed the `metering` schema and its three proxy models
+  (`TenantSubscriptionQuota`/`TenantUsageEvent`/`TenantUsageSummary`) from
+  `service/prisma/schema.prisma` - that schema belongs to the platform DB,
+  which Atlas no longer connects to directly (zero cross-database FK,
+  boundary #1).
+- **What breaks**: `service/src/quota/quota.service.ts`,
+  `service/src/metering/metering.service.ts`, and
+  `service/src/registry/model-registry.repository.ts` still call
+  `prisma.tenantSubscriptionQuota`/`tenantUsageEvent`/`tenantUsageSummary` -
+  these will fail `type-check`/`build` immediately (the generated Prisma
+  client no longer has these models).
+- **Why this was left broken on purpose**: the correct fix is replacing these
+  direct Prisma calls with the C2 entitlement client and C3 consume
+  buffer/flush client (design in
+  `docs/30-design/200-s2s-provider-surface.md` section 1.2) - that is
+  business-logic implementation, explicitly out of scope for this migration
+  pass. Leaving the schema half-connected to the platform DB (i.e. not
+  removing the metering proxy models) would have been the actual shortcut;
+  a clean compile break is the honest state to hand off.
+- **Recovery condition**: Phase 3 of the repo-split plan implements the C2/C3
+  clients and rewires these three files to use them instead of Prisma.

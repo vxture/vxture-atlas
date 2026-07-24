@@ -6,91 +6,25 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["metering", "model"]
+  schemas  = ["key", "reqlog", "routing", "model"]
 }
 
-// 平台库 18-schema cutover 后（commerce → metering 重构，model.* 表复数化）本代理模型已重映射。
-// model schema 的 DDL 权威在 deploy/database/ddl/60_model.sql；metering 在 50_metering.sql。
-// 本文件声明 Prisma Client 代理，供 ModelRegistryRepository 在服务内直接查询，无需跨服务 RPC。
+// Atlas 拆仓迁移（2026-07-24）：本库现为独立物理库 vxturestudio_modelruntime_main，
+// 与平台库 vxturestudio_platform_main 零跨库 FK（边界#1，见拆仓计划 Phase 2）。
+// DDL 权威在本仓 deploy/database/ddl/00_baseline.sql。
 //
-// FLAG（metering 集成缺口 — 待 commerce 域解耦重构收口）：
-//   旧 commerce.tenant_subscription_quota / tenant_usage_event / tenant_usage_summary 已被
-//   metering.quota_pools / usage_events / usage_summary_* 取代，语义从 tenant 级 token 预算
-//   改为 workspace+product+metric_key 的多池计量。本服务当前只有 tenantId，缺 workspace_id /
-//   product_id / metric_key，且 usage_events/usage_summary_* 对 workspaces/products 有真实跨库 FK。
-//   因此：读路径（配额/用量只读，就绪检查）已重映射到新表使查询可解；
-//   配额“允许模型/自定义模型/period_tokens”等旧概念在新表无对应（模型授权已由 model_grants 承担）；
-//   用量写路径（recordUsage）在拿到 workspace/product/metric 映射前无法落库，见 repository 内 FLAG。
+// TD-002/TD-005（本次迁移只搬迁数据模型边界，不改代码——业务逻辑改造转交后续开发任务）：
+//   原 metering.quota_pools / usage_events / usage_summary_months 三个 Prisma 代理模型已随本次
+//   物理分库移除——它们是**平台库**的 schema，Atlas 拆仓后不再直连，必须改经 C2 entitlement /
+//   C3 consume 网络契约访问（见 docs/30-design/200-s2s-provider-surface.md，及平台仓拆仓计划
+//   Phase 2/3）。src/quota/quota.service.ts、src/metering/metering.service.ts、
+//   src/registry/model-registry.repository.ts 中对 prisma.tenantSubscriptionQuota /
+//   tenantUsageEvent / tenantUsageSummary 的直接查询，在本次迁移后**将编译失败**——这是有意的：
+//   这些调用点必须被替换为 C2/C3 客户端调用，而不是继续代理到一个不再存在于本库的 schema。
+//   本次迁移不做这个替换（业务逻辑改造，转交后续开发任务），只确保数据模型边界迁移彻底、
+//   不留半个脚踩在平台库上的默认状态。
 
-// ── metering schema（订阅/配额/用量计量内核，只读代理 + 写路径待接入） ──
-
-// 旧 TenantSubscriptionQuota → metering.quota_pools（workspace+product+metric 多池实时余量 SoT）。
-model TenantSubscriptionQuota {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId        String    @map("workspace_id") @db.Uuid
-  subscriptionId     String?   @map("subscription_id") @db.Uuid
-  productId          String    @map("product_id") @db.Uuid
-  metricKey          String    @map("metric_key") @db.VarChar(64)
-  quotaLimit         BigInt    @map("quota_limit")
-  quotaUsed          BigInt    @default(0) @map("quota_used")
-  priority           Int       @default(100)
-  componentRole      String    @default("primary") @map("component_role") @db.VarChar(16)
-  poolSource         String    @default("subscription") @map("pool_source") @db.VarChar(32)
-  resetPeriod        String    @default("none") @map("reset_period") @db.VarChar(16)
-  periodAnchor       DateTime? @map("period_anchor") @db.Timestamptz(6)
-  currentPeriodStart DateTime? @map("current_period_start") @db.Timestamptz(6)
-  status             String    @default("active") @db.VarChar(32)
-  retiredAt          DateTime? @map("retired_at") @db.Timestamptz(6)
-  grantedBy          String?   @map("granted_by") @db.Uuid
-  grantReason        String?   @map("grant_reason") @db.VarChar(256)
-  effectiveAt        DateTime  @default(now()) @map("effective_at") @db.Timestamptz(6)
-  expiresAt          DateTime? @map("expires_at") @db.Timestamptz(6)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@index([workspaceId, productId, metricKey, priority], map: "idx_quota_pools_route")
-  @@map("quota_pools")
-  @@schema("metering")
-}
-
-// 旧 TenantUsageEvent → metering.usage_events（append-only，按月 RANGE 分区，复合 PK）。
-// 写路径待接入（见 repository FLAG）；此处保留代理定义以生成 client。
-model TenantUsageEvent {
-  id              String   @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId     String   @map("workspace_id") @db.Uuid
-  productId       String   @map("product_id") @db.Uuid
-  metricKey       String   @map("metric_key") @db.VarChar(64)
-  totalAmount     BigInt   @map("total_amount")
-  requestedAmount BigInt?  @map("requested_amount")
-  idempotencyKey  String?  @map("idempotency_key") @db.VarChar(128)
-  requestId       String?  @map("request_id") @db.VarChar(128)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@id([id, createdAt])
-  @@index([workspaceId, productId, metricKey], map: "idx_usage_events_route")
-  @@index([idempotencyKey], map: "idx_usage_events_idempotency")
-  @@index([requestId], map: "idx_usage_events_request_id")
-  @@map("usage_events")
-  @@schema("metering")
-}
-
-// 旧 TenantUsageSummary → metering.usage_summary_months（多维降采样汇总的“月”档，仅统计/看板）。
-model TenantUsageSummary {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId  String   @map("workspace_id") @db.Uuid
-  productId    String   @map("product_id") @db.Uuid
-  metricKey    String   @map("metric_key") @db.VarChar(64)
-  periodMonth  String   @map("period_month") @db.VarChar(8)
-  totalAmount  BigInt   @default(0) @map("total_amount")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@unique([workspaceId, productId, metricKey, periodMonth], map: "uq_usage_summary_months")
-  @@map("usage_summary_months")
-  @@schema("metering")
-}
-
-// ── model schema（模型治理配置，只读/读写代理，DDL 权威 60_model.sql） ──
+// ── model schema（模型治理配置，DDL 权威 deploy/database/ddl/00_baseline.sql） ──
 
 model ModelProvider {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
