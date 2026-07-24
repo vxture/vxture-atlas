@@ -16,6 +16,7 @@ import { QuotaService } from "../quota/quota.service";
 import { resolveApplicationScope } from "../quota/quota.service";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { ModelRuntimeErrorResponse } from "./runtime.errors";
+import { resolveApiKey } from "./resolve-api-key";
 import type {
   AiModelRecord,
   ChatRequest,
@@ -98,7 +99,7 @@ export class ModelRuntimeService {
 
         try {
           const provider = this.router.resolve(model.provider, model.modelCode);
-          const apiKey = this.resolveApiKey(model, requestId);
+          const apiKey = resolveApiKey(model, requestId);
           this.logRuntimeEvent("model_runtime_provider_start", {
             request,
             requestId,
@@ -300,7 +301,7 @@ export class ModelRuntimeService {
 
         try {
           const provider = this.router.resolve(model.provider, model.modelCode);
-          const apiKey = this.resolveApiKey(model, requestId);
+          const apiKey = resolveApiKey(model, requestId);
           this.logRuntimeEvent("model_runtime_provider_stream_start", {
             request,
             requestId,
@@ -531,38 +532,6 @@ export class ModelRuntimeService {
     if (invalidMessage) {
       throw new BadRequestException("messages contain invalid role or content");
     }
-  }
-
-  private resolveApiKey(model: AiModelRecord, requestId?: string): string {
-    const config = model.config as Record<string, unknown> | null;
-    const apiKeyEnvVar =
-      typeof config?.["apiKeyEnvVar"] === "string"
-        ? config["apiKeyEnvVar"]
-        : "";
-
-    if (!apiKeyEnvVar) {
-      return "";
-    }
-
-    const apiKey = process.env[apiKeyEnvVar];
-
-    if (
-      !apiKey &&
-      !["private", "custom", "self-hosted"].includes(model.provider)
-    ) {
-      throw new ModelRuntimeException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "PROVIDER_UNAVAILABLE",
-        `Missing API key environment variable "${apiKeyEnvVar}" for model "${model.modelCode}"`,
-        {
-          ...(requestId !== undefined ? { requestId } : {}),
-          modelCode: model.modelCode,
-          provider: model.provider,
-        },
-      );
-    }
-
-    return apiKey ?? "";
   }
 
   private async resolveCandidateModels(

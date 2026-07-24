@@ -13,6 +13,21 @@ import type {
 export const COMMERCE_SENTINEL_UUID = "00000000-0000-0000-0000-000000000000";
 
 /**
+ * The subset of ChatRequest that quota/grant gating actually reads. Lets the A1/A2/A3
+ * S2S provider endpoints (TD-003) reuse assertAllowed without needing a full chat-shaped
+ * request (they have no `messages`/no `modelCode` on the request body itself - modelCode
+ * is a separate parameter). ChatRequest still satisfies this structurally, so the chat
+ * call sites (runtime.service.ts) are unaffected.
+ */
+export interface QuotaCheckRequest {
+  tenantId: string;
+  applicationId?: string;
+  applicationType?: ApplicationType;
+  agentId?: string;
+  featureId?: string;
+}
+
+/**
  * Synthetic quota used when the real quota source cannot be resolved (TD-002/TD-005 -
  * the C2 entitlement read is blocked on the platform's product.agent_catalog, see
  * ModelRegistryRepository.findCurrentSubscriptionQuota). `periodTokens: -1n` reuses this
@@ -63,7 +78,7 @@ export class QuotaService {
 
   async assertAllowed(
     model: AiModelRecord,
-    request: ChatRequest,
+    request: QuotaCheckRequest,
   ): Promise<QuotaContext> {
     const now = new Date();
     const applicationScope = resolveApplicationScope(request);
@@ -135,7 +150,7 @@ export class QuotaService {
 
   private async checkCommerceQuota(
     model: AiModelRecord,
-    request: ChatRequest,
+    request: QuotaCheckRequest,
     quota: TenantSubscriptionQuotaRecord,
     now: Date,
   ): Promise<QuotaCheckResult> {

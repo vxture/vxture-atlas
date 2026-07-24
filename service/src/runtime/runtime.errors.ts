@@ -22,7 +22,14 @@ export type ModelRuntimeErrorCode =
   | "GRANT_DENIED"
   | "QUOTA_EXCEEDED"
   | "PROVIDER_UNAVAILABLE"
-  | "MODEL_RUNTIME_REQUEST_FAILED";
+  | "MODEL_RUNTIME_REQUEST_FAILED"
+  // S2S provider surface (A1 embed / A2 parse / A3 rerank, TD-003, docs/30-design/200-s2s-provider-surface.md).
+  // Shared error envelope across A1-A4 per that doc's §1.1 (G1) - same class, wider code union.
+  | "QUOTA_EXHAUSTED"
+  | "RATE_LIMITED"
+  | "CANDIDATE_POOL_TOO_LARGE"
+  | "RERANK_UNAVAILABLE"
+  | "MODEL_NOT_IMPLEMENTED";
 
 export interface ModelRuntimeErrorResponse {
   code: ModelRuntimeErrorCode;
@@ -30,6 +37,10 @@ export interface ModelRuntimeErrorResponse {
   requestId?: string;
   modelCode?: string;
   provider?: string;
+  /** G1 (RATE_LIMITED, 429) - milliseconds until the caller should retry. */
+  retryAfterMs?: number;
+  /** G1 (QUOTA_EXHAUSTED, 403) - ISO8601 when quota resets, or null if unknown. */
+  resetAt?: string | null;
 }
 
 // ============================================================================
@@ -45,6 +56,8 @@ export class ModelRuntimeException extends HttpException {
       requestId?: string;
       modelCode?: string;
       provider?: string;
+      retryAfterMs?: number;
+      resetAt?: string | null;
     } = {},
   ) {
     super(
@@ -59,6 +72,12 @@ export class ModelRuntimeException extends HttpException {
           : {}),
         ...(metadata.provider !== undefined
           ? { provider: metadata.provider }
+          : {}),
+        ...(metadata.retryAfterMs !== undefined
+          ? { retryAfterMs: metadata.retryAfterMs }
+          : {}),
+        ...(metadata.resetAt !== undefined
+          ? { resetAt: metadata.resetAt }
           : {}),
       } satisfies ModelRuntimeErrorResponse,
       status,
