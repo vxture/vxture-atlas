@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 
 import { ModelRegistryRepository } from "../registry/model-registry.repository";
 import { ModelRuntimeException } from "../runtime/runtime.errors";
@@ -11,6 +11,35 @@ import type {
 } from "../types/runtime.types";
 
 export const COMMERCE_SENTINEL_UUID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Synthetic quota used when the real quota source cannot be resolved (TD-002/TD-005 -
+ * the C2 entitlement read is blocked on the platform's product.agent_catalog, see
+ * ModelRegistryRepository.findCurrentSubscriptionQuota). `periodTokens: -1n` reuses this
+ * file's own existing "unlimited" convention (see checkCommerceQuota). Model-level
+ * allowedModels/allowCustomModel gating is deliberately NOT applied in this state - that
+ * gating is quota-config-derived, and enforcing it against an unresolvable config would
+ * silently and incorrectly deny every private/custom-provider request. Model-level
+ * authorization has already happened via QuotaService.assertAllowed's earlier
+ * ModelRegistryRepository.findBestGrant call (a real, working ModelGrant lookup) before
+ * this synthetic quota is ever used.
+ */
+const FAIL_OPEN_QUOTA: TenantSubscriptionQuotaRecord = {
+  id: COMMERCE_SENTINEL_UUID,
+  tenantId: COMMERCE_SENTINEL_UUID,
+  subscriptionId: null,
+  maxUsers: 0,
+  maxApiKeys: 0,
+  maxWorkflows: 0,
+  maxConcurrent: 0,
+  rateLimitPerMinute: 0,
+  periodTokens: -1n,
+  quotaCycle: "unbounded",
+  allowedModels: [],
+  allowCustomModel: false,
+  effectiveAt: new Date(0),
+  expiresAt: null,
+};
 
 export interface QuotaContext {
   tenantId: string;
@@ -25,6 +54,8 @@ export interface QuotaContext {
 
 @Injectable()
 export class QuotaService {
+  private readonly logger = new Logger(QuotaService.name);
+
   constructor(
     @Inject(ModelRegistryRepository)
     private readonly repository: ModelRegistryRepository,
@@ -60,13 +91,27 @@ export class QuotaService {
       now,
     );
 
+    const context = {
+      tenantId: request.tenantId,
+      applicationId: applicationScope.applicationId,
+      applicationType: applicationScope.applicationType,
+      agentId: applicationScope.agentId,
+      featureId: normalizeUuidScope(request.featureId),
+      cycleMonth: toCycleMonth(now),
+    };
+
+    // FAIL-OPEN (TD-002/TD-005): no quota source is resolvable yet (blocked on the
+    // platform's product.agent_catalog - see FAIL_OPEN_QUOTA). Per the platform's own
+    // documented doctrine (data_model_200_schema.md §3), an unavailable quota source
+    // bounded-fail-opens the request rather than denying it or crashing. This is NOT the
+    // same as "quota checked and found unlimited" - it means "quota could not be checked",
+    // so model-allowlist gating from a synthetic quota is skipped entirely (see
+    // FAIL_OPEN_QUOTA's own comment for why).
     if (!quota) {
-      throw new ModelRuntimeException(
-        HttpStatus.FORBIDDEN,
-        "QUOTA_EXCEEDED",
-        "Current tenant has no active subscription quota",
-        { modelCode: model.modelCode },
+      this.logger.warn(
+        `quota check fail-open: no resolvable quota for tenant=${request.tenantId}, model=${model.modelCode} - allowing (TD-002/TD-005)`,
       );
+      return { ...context, quota: FAIL_OPEN_QUOTA, remaining: -1n };
     }
 
     const commerceCheck = await this.checkCommerceQuota(
@@ -85,16 +130,7 @@ export class QuotaService {
       );
     }
 
-    return {
-      tenantId: request.tenantId,
-      applicationId: applicationScope.applicationId,
-      applicationType: applicationScope.applicationType,
-      agentId: applicationScope.agentId,
-      featureId: normalizeUuidScope(request.featureId),
-      cycleMonth: toCycleMonth(now),
-      quota,
-      remaining: commerceCheck.remaining,
-    };
+    return { ...context, quota, remaining: commerceCheck.remaining };
   }
 
   private async checkCommerceQuota(

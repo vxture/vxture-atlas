@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import {
   QuotaService,
@@ -8,7 +8,9 @@ import {
   resolveApplicationScope,
 } from "./quota.service";
 import type {
+  AiModelGrantRecord,
   AiModelRecord,
+  ChatRequest,
   TenantSubscriptionQuotaRecord,
 } from "../types/runtime.types";
 
@@ -273,5 +275,97 @@ describe("isModelAllowed", () => {
         true,
       );
     });
+  });
+});
+
+// ── assertAllowed fail-open (TD-002/TD-005) ──────────────────────────────────
+
+function makeGrant(overrides: Partial<AiModelGrantRecord> = {}): AiModelGrantRecord {
+  return {
+    id: "grant-1",
+    modelId: "model-1",
+    tenantId: "tenant-1",
+    applicationId: null,
+    applicationType: null,
+    agentId: null,
+    priority: 100,
+    reason: null,
+    expiresAt: null,
+    isActive: true,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function makeRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
+  return {
+    modelCode: "gpt-4o",
+    messages: [],
+    tenantId: "tenant-1",
+    ...overrides,
+  };
+}
+
+describe("QuotaService.assertAllowed", () => {
+  it("still denies when there is no grant for the model", async () => {
+    const repository = {
+      findBestGrant: vi.fn().mockResolvedValue(null),
+      findCurrentSubscriptionQuota: vi.fn(),
+    };
+    const svc = new QuotaService(repository as never);
+
+    await expect(
+      svc.assertAllowed(makeModel(), makeRequest()),
+    ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    expect(repository.findCurrentSubscriptionQuota).not.toHaveBeenCalled();
+  });
+
+  it("denies when a real quota is resolved and it is exhausted", async () => {
+    const repository = {
+      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
+      findCurrentSubscriptionQuota: vi
+        .fn()
+        .mockResolvedValue(makeQuota({ periodTokens: 0n })),
+      findUsageSummary: vi.fn().mockResolvedValue(null),
+    };
+    const svc = new QuotaService(repository as never);
+
+    await expect(
+      svc.assertAllowed(makeModel(), makeRequest()),
+    ).rejects.toMatchObject({ code: "QUOTA_EXCEEDED" });
+  });
+
+  it("allows when a real quota is resolved with remaining tokens", async () => {
+    const repository = {
+      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
+      findCurrentSubscriptionQuota: vi
+        .fn()
+        .mockResolvedValue(makeQuota({ periodTokens: 1_000n })),
+      findUsageSummary: vi.fn().mockResolvedValue(null),
+    };
+    const svc = new QuotaService(repository as never);
+
+    const ctx = await svc.assertAllowed(makeModel(), makeRequest());
+    expect(ctx.remaining).toBe(1_000n);
+  });
+
+  it("fail-opens (allows) when no quota source is resolvable, without crashing", async () => {
+    const repository = {
+      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
+      findCurrentSubscriptionQuota: vi.fn().mockResolvedValue(null),
+    };
+    const svc = new QuotaService(repository as never);
+
+    const ctx = await svc.assertAllowed(
+      makeModel({ provider: "private", modelCode: "my-llm" }),
+      makeRequest(),
+    );
+
+    expect(ctx.remaining).toBe(-1n);
+    expect(ctx.quota.periodTokens).toBe(-1n);
   });
 });

@@ -1,11 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 
-import {
-  prisma,
-  type AiModelRow,
-  type QuotaPoolRow,
-  type UsageSummaryRow,
-} from "../prisma";
+import { prisma, type AiModelRow } from "../prisma";
 import type {
   AiModelGrantRecord,
   AiModelRecord,
@@ -405,101 +400,56 @@ export class ModelRegistryRepository {
   }
 
   /**
-   * Resolve the active quota for a tenant. When a subscription is resolved for
-   * the request (per-app), prefer that subscription's pool; otherwise fall back
-   * to the workspace-wide active pool.
+   * Resolve the active quota for a tenant.
    *
-   * FLAG (metering restructure): the legacy commerce.tenant_subscription_quota is gone;
-   * this now reads metering.quota_pools which is keyed by workspace_id (NOT tenant_id).
-   * We treat the incoming `tenantId` as the workspace key as a documented stand-in until the
-   * tenant→workspace resolution lands. Rows are projected onto the legacy record via mapQuotaPool.
+   * FAIL-OPEN (TD-002/TD-005, 2026-07-24): a real answer requires the C2 entitlement
+   * read (`quota_pools`/balance API, product_200_integration.md §3.1), which in turn
+   * requires the platform's tenant/application/agent → workspace/product/metric
+   * scope-key reconciliation (data_model_200_schema.md §2). That reconciliation depends
+   * on `product.agent_catalog`, which has not landed on the platform side yet - not
+   * something this repo can build around. Until then this always reports "no quota
+   * resolvable"; callers (QuotaService.assertAllowed) treat that as bounded fail-open
+   * per the platform's own documented doctrine (data_model_200_schema.md §3: "同步 +
+   * 有界本地 fail-open + 异步对账"), not as a denial and not as a crash - this used to
+   * call a Prisma delegate (`tenantSubscriptionQuota`) with no real backing model,
+   * which threw at runtime (see prisma.ts).
    */
-  async findCurrentSubscriptionQuota(
-    tenantId: string,
-    at: Date,
-    subscriptionId?: string,
+  findCurrentSubscriptionQuota(
+    _tenantId: string,
+    _at: Date,
+    _subscriptionId?: string,
   ): Promise<TenantSubscriptionQuotaRecord | null> {
-    const active = {
-      effectiveAt: { lte: at },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: at } }],
-    };
-    const orderBy = [
-      { effectiveAt: "desc" as const },
-      { createdAt: "desc" as const },
-    ];
-
-    if (subscriptionId) {
-      const scoped = await prisma.tenantSubscriptionQuota.findFirst({
-        where: { workspaceId: tenantId, subscriptionId, ...active },
-        orderBy,
-      });
-      if (scoped) return mapQuotaPool(scoped);
-    }
-
-    const wide = await prisma.tenantSubscriptionQuota.findFirst({
-      where: { workspaceId: tenantId, ...active },
-      orderBy,
-    });
-
-    return wide ? mapQuotaPool(wide) : null;
+    return Promise.resolve(null);
   }
 
-  async listSubscriptionQuotas(filters: {
+  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
+  listSubscriptionQuotas(_filters: {
     tenantId?: string;
     includeExpired?: boolean;
   }): Promise<TenantSubscriptionQuotaRecord[]> {
-    const now = new Date();
-
-    // FLAG: tenantId filter mapped to workspace_id (quota_pools has no tenant_id column).
-    const rows = await prisma.tenantSubscriptionQuota.findMany({
-      where: {
-        ...(filters.tenantId ? { workspaceId: filters.tenantId } : {}),
-        ...(filters.includeExpired
-          ? {}
-          : { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }),
-      },
-      orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
-    });
-
-    return rows.map(mapQuotaPool);
+    return Promise.resolve([]);
   }
 
-  /**
-   * FLAG: metering.usage_summary_months has no agent/feature/statType dimensions; only
-   * workspace_id + period_month are honored here (the other filters are dropped).
-   */
-  async findUsageSummary(input: {
+  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
+  findUsageSummary(_input: {
     tenantId: string;
     agentId: string;
     featureId: string;
     cycleMonth: string;
     statType: string;
   }): Promise<TenantUsageSummaryRecord | null> {
-    const row = await prisma.tenantUsageSummary.findFirst({
-      where: { workspaceId: input.tenantId, periodMonth: input.cycleMonth },
-    });
-
-    return row ? mapUsageSummary(row) : null;
+    return Promise.resolve(null);
   }
 
-  async listUsageSummaries(filters: {
+  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
+  listUsageSummaries(_filters: {
     tenantId?: string;
     applicationId?: string;
     applicationType?: ApplicationType;
     cycleMonth?: string;
     statType?: string;
   }): Promise<TenantUsageSummaryRecord[]> {
-    // FLAG: applicationId/applicationType/statType filters dropped (no equivalent columns in
-    // usage_summary_months). Only workspace_id (from tenantId) + period_month are applied.
-    const rows = await prisma.tenantUsageSummary.findMany({
-      where: {
-        ...(filters.tenantId ? { workspaceId: filters.tenantId } : {}),
-        ...(filters.cycleMonth ? { periodMonth: filters.cycleMonth } : {}),
-      },
-      orderBy: [{ periodMonth: "desc" }],
-    });
-
-    return rows.map(mapUsageSummary);
+    return Promise.resolve([]);
   }
 
   /**
@@ -568,54 +518,4 @@ function stripRetiredProvider(
   const data: Record<string, unknown> = { ...input };
   delete data["provider"];
   return data;
-}
-
-/**
- * metering.quota_pools row → legacy TenantSubscriptionQuotaRecord.
- * FLAG: quota_pools (workspace+product+metric multi-pool) has no 1:1 with the tenant-level
- * subscription quota. Fields with no new-schema equivalent are defaulted:
- *   maxUsers/maxApiKeys/maxWorkflows/maxConcurrent/rateLimitPerMinute → 0,
- *   allowedModels → [] and allowCustomModel → false (model gating now lives in model_grants),
- *   periodTokens ← quota_limit, tenantId ← workspace_id, quotaCycle ← reset_period.
- */
-function mapQuotaPool(row: QuotaPoolRow): TenantSubscriptionQuotaRecord {
-  return {
-    id: row.id,
-    tenantId: row.workspaceId,
-    subscriptionId: row.subscriptionId,
-    maxUsers: 0,
-    maxApiKeys: 0,
-    maxWorkflows: 0,
-    maxConcurrent: 0,
-    rateLimitPerMinute: 0,
-    periodTokens: row.quotaLimit,
-    quotaCycle: row.resetPeriod,
-    allowedModels: [],
-    allowCustomModel: false,
-    effectiveAt: row.effectiveAt,
-    expiresAt: row.expiresAt,
-  };
-}
-
-/**
- * metering.usage_summary_months row → legacy TenantUsageSummaryRecord.
- * FLAG: no per application/agent/feature or input/output/request breakdown and no stat_type in
- * the new summary; those dimensions are defaulted. totalQuota ← total_amount,
- * tenantId ← workspace_id, cycleMonth ← period_month.
- */
-function mapUsageSummary(row: UsageSummaryRow): TenantUsageSummaryRecord {
-  return {
-    id: row.id,
-    tenantId: row.workspaceId,
-    featureId: COMMERCE_SENTINEL_UUID,
-    applicationId: COMMERCE_SENTINEL_UUID,
-    applicationType: "internal_service",
-    agentId: COMMERCE_SENTINEL_UUID,
-    cycleMonth: row.periodMonth,
-    totalQuota: row.totalAmount,
-    inputQuota: 0n,
-    outputQuota: 0n,
-    requestCount: 0n,
-    statType: "summary",
-  };
 }

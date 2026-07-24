@@ -30,6 +30,17 @@ inference-metering entry point, S2S provider surface (embedding/parse/rerank -
 see TD-003 and the karda requirements letter) + S2S caller (upstream provider
 adapters, carried over unchanged from the in-monorepo implementation).
 
+**Blocked, confirmed 2026-07-24**: the C2/C3 half depends on the platform's
+`tenant/application/agent` → `workspace/product/metric` scope-key
+reconciliation (`data_model_200_schema.md` §2), which itself depends on the
+platform's `product.agent_catalog` - not landed there yet. Not something
+this repo can build around. **Interim fix landed instead**: removed the
+ghost Prisma delegates that were crashing the request hot path (TD-005) and
+replaced them with the platform's own documented fail-open doctrine
+(`data_model_200_schema.md` §3) - see TD-002/TD-005 progress notes. This is
+a stopgap, not Phase 3 completion; real C2/C3 wiring still needs to happen
+once `product.agent_catalog` lands.
+
 ## Phase 4 - extraction mechanics
 
 `git filter-repo`/`subtree split` of `services/model/platform` from
