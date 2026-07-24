@@ -64,12 +64,7 @@ jobs:
           # osv-scanner does not auto-discover the repo-root config, so the
           # ignore baseline would silently not apply. A new advisory exits
           # non-zero and fails this required check.
-          # --allow-no-lockfiles: until Phase 4 migrates service/ in (with its
-          # real dependencies), pnpm-lock.yaml has zero packages and
-          # osv-scanner would otherwise exit 128 ("no package sources").
-          # Remove this flag once service/ lands - a real scan should not
-          # silently no-op.
-          /tmp/osv-bin/osv-scanner scan -L pnpm-lock.yaml --config .osv-scanner.toml --allow-no-lockfiles
+          /tmp/osv-bin/osv-scanner scan -L pnpm-lock.yaml --config .osv-scanner.toml
 
   # -- Static checks (feed quality-gate) --------------------------------------
   static-checks:
