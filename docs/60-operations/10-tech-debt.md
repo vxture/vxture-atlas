@@ -16,10 +16,10 @@ repo-split plan itself - not discovered later.
 | ID | Title | Opened | Status |
 |----|-------|--------|--------|
 | TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); secrets/GitHub Environment/registry mirror still open |
-| TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocks C3 consume wiring (Phase 3) |
+| TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocked on platform `product.agent_catalog` (see TD-005 progress note), not just C3 consume wiring |
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | open - v0.1 design drafted (`docs/30-design/200-s2s-provider-surface.md`); rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
-| TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | open - will fail `type-check`/`build` until Phase 3 replaces these direct Prisma calls with C2/C3 network clients |
+| TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -66,6 +66,16 @@ repo-split plan itself - not discovered later.
   a side effect of the split, not a separate fix.
 - **Report to platform line**: carried in the repo-split plan itself
   (`vxture-platform`, Phase 2 item 3).
+- **Progress (2026-07-24)**: confirmed this is genuinely blocked, not just
+  unscheduled - `vxture-platform`'s `docs/30-design/data_model_200_schema.md`
+  §2 states the `tenant/application/agent` → `workspace/product/metric`
+  scope-key reconciliation (required before `POST /usage/consume` can be
+  called at all) itself depends on the platform's `product.agent_catalog`
+  (application/agent → product mapping), which has **not landed** on the
+  platform side ("产品域规划态，本轮未落"). Per that same doc's §3
+  ("同步 + 有界本地 fail-open + 异步对账"), the platform's own documented
+  doctrine for this exact situation is bounded fail-open, not blocking - see
+  TD-005's progress note for what changed here as a result.
 
 ## TD-003 - S2S provider surface not designed
 
@@ -155,3 +165,26 @@ repo-split plan itself - not discovered later.
   a clean compile break is the honest state to hand off.
 - **Recovery condition**: Phase 3 of the repo-split plan implements the C2/C3
   clients and rewires these three files to use them instead of Prisma.
+- **Progress (2026-07-24) - crash risk closed, real fix still blocked**: a
+  code-state audit confirmed the runtime-crash risk described above was live
+  on the request hot path - `QuotaService.assertAllowed` (called on every
+  `/model-platform/chat` request) reached `findCurrentSubscriptionQuota`,
+  which called the non-existent `prisma.tenantSubscriptionQuota` delegate.
+  No test caught it because `quota.service.spec.ts` only unit-tested the pure
+  `isModelAllowed` helper, and `model-registry.repository.spec.ts` mocked the
+  ghost delegate directly rather than exercising real Prisma access.
+  Fixed by removing the three ghost delegates and their `QuotaPoolRow`/
+  `UsageEventRow`/`UsageSummaryRow` types from `service/src/prisma.ts`
+  entirely (no more unsafe cast), and rewriting
+  `findCurrentSubscriptionQuota`/`listSubscriptionQuotas`/`findUsageSummary`/
+  `listUsageSummaries` in `model-registry.repository.ts` to return
+  `null`/`[]` directly - matching the platform's own documented fail-open
+  doctrine (`data_model_200_schema.md` §3) rather than crashing or denying.
+  `QuotaService.assertAllowed` now treats "no quota resolvable" as bounded
+  fail-open (allow, log a warning, skip model-allowlist gating since that
+  gating is itself quota-config-derived and unenforceable without a real
+  quota) rather than throwing `QUOTA_EXCEEDED`. Real quota resolution (a
+  quota IS found) is unchanged. This closes the crash/silent-mismeter risk;
+  it does **not** implement real C2/C3 wiring, which per TD-002's progress
+  note is blocked on the platform's `product.agent_catalog` and out of this
+  repo's control.
