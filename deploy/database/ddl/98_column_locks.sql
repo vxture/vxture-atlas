@@ -67,3 +67,15 @@ GRANT UPDATE (name, priority, max_concurrent, rate_limit_rpm, rate_limit_tpm,
               rate_limit_tpd, max_context_tokens, is_active, expires_at,
               updated_by, updated_at)
   ON model.model_policies TO atlas_svc;
+
+-- --- provisioning ---
+-- workspace_provisionings: upserted on every valid webhook event - status/seq/
+-- timestamps are writable, identity (workspace_id, product_code) and created_at
+-- are not (a change there would silently re-point the row at a different
+-- workspace rather than recording a new event for the same one).
+REVOKE UPDATE ON provisioning.workspace_provisionings FROM atlas_svc;
+GRANT UPDATE (status, seq, provisioned_at, deprovisioned_at, updated_at)
+  ON provisioning.workspace_provisionings TO atlas_svc;
+
+-- webhook_deliveries: append-only idempotency ledger -> no UPDATE at all.
+REVOKE UPDATE ON provisioning.webhook_deliveries FROM atlas_svc;

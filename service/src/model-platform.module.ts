@@ -21,6 +21,9 @@ import { RerankController } from "./rerank/rerank.controller";
 import { RerankService } from "./rerank/rerank.service";
 import { ParseController } from "./parse/parse.controller";
 import { ParseService } from "./parse/parse.service";
+import { ProvisioningWebhookController } from "./provisioning/provisioning-webhook.controller";
+import { ProvisioningWebhookService } from "./provisioning/provisioning-webhook.service";
+import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webhook.repository";
 
 @Module({
   controllers: [
@@ -31,6 +34,7 @@ import { ParseService } from "./parse/parse.service";
     EmbeddingController,
     RerankController,
     ParseController,
+    ProvisioningWebhookController,
   ],
   providers: [
     ModelRuntimeService,
@@ -47,6 +51,8 @@ import { ParseService } from "./parse/parse.service";
     EmbeddingService,
     RerankService,
     ParseService,
+    ProvisioningWebhookService,
+    ProvisioningWebhookRepository,
   ],
   exports: [
     ModelRuntimeService,

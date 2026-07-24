@@ -8,18 +8,26 @@
 -- deploy/database/ddl/60_model.sql there) - see the Atlas repo-split plan,
 -- Phase 2.
 --
--- Four schemas, ALL physically isolated from the shared platform DB
+-- Five schemas, ALL physically isolated from the shared platform DB
 -- (vxturestudio_platform_main) - zero cross-database FK (boundary #1).
 -- Cross-database references are loose values (request_id, provider_code,
 -- model_code, tenant_id) validated at the application layer via the C2/C3
 -- network contract, never a DB constraint:
---   key     - provider API keys (AES-256-GCM ciphertext only, plaintext never
---             leaves this schema)
---   reqlog  - high-frequency AI request/error logs, monthly RANGE partitions,
---             append-only
---   routing - connection/routing/fallback config
---   model   - provider/model/grant/price_rule/policy registry (Atlas's own
---             product data - moved here from the platform's `model` schema)
+--   key          - provider API keys (AES-256-GCM ciphertext only, plaintext
+--                  never leaves this schema)
+--   reqlog       - high-frequency AI request/error logs, monthly RANGE
+--                  partitions, append-only
+--   routing      - connection/routing/fallback config
+--   model        - provider/model/grant/price_rule/policy registry (Atlas's
+--                  own product data - moved here from the platform's `model`
+--                  schema)
+--   provisioning - Atlas's own receiving-side state for the platform's C3
+--                  provisioning webhook (docs/30-design/identity/080-rp-integration.md
+--                  section 4/5, wire contract already in production for
+--                  arda) - added 2026-07-24, TD-003 batch. Atlas is the
+--                  receiver here, not the platform's dispatcher; these two
+--                  tables exist so idempotency/ordering survive a restart or
+--                  multiple instances, per that doc's explicit requirement.
 --
 -- Design authority: docs/design/data_model_200_schema.md section 4 (platform
 -- repo). Prisma schema (service/prisma/schema.prisma) is a client-generation
@@ -27,10 +35,11 @@
 -- (scripts/guardrails/check-data-architecture.mjs).
 -- ═══════════════════════════════════════════════════════════════════════════
 
-CREATE SCHEMA IF NOT EXISTS key;      -- provider secrets (AES-256 ciphertext, plaintext never leaves this schema)
-CREATE SCHEMA IF NOT EXISTS reqlog;   -- high-frequency AI request logs / error detail (monthly RANGE partitions, append-only)
-CREATE SCHEMA IF NOT EXISTS routing;  -- connection / routing / fallback config
-CREATE SCHEMA IF NOT EXISTS model;    -- model governance config (provider/model/grant/price_rule/policy)
+CREATE SCHEMA IF NOT EXISTS key;           -- provider secrets (AES-256 ciphertext, plaintext never leaves this schema)
+CREATE SCHEMA IF NOT EXISTS reqlog;        -- high-frequency AI request logs / error detail (monthly RANGE partitions, append-only)
+CREATE SCHEMA IF NOT EXISTS routing;       -- connection / routing / fallback config
+CREATE SCHEMA IF NOT EXISTS model;         -- model governance config (provider/model/grant/price_rule/policy)
+CREATE SCHEMA IF NOT EXISTS provisioning;  -- C3 provisioning webhook receiver state (workspace status + delivery idempotency)
 
 -- ═══ schema key ═══
 -- Provider API key vault. Never store plaintext keys - only AES-256-GCM
@@ -340,3 +349,46 @@ CREATE TABLE model.model_policies (
 CREATE INDEX idx_model_policies_model     ON model.model_policies (model_id);
 CREATE INDEX idx_model_policies_tenant    ON model.model_policies (tenant_id);
 CREATE INDEX idx_model_policies_is_active ON model.model_policies (is_active);
+
+-- ═══ schema provisioning ═══
+-- Atlas's receiving side of the platform's C3 provisioning webhook
+-- (docs/30-design/identity/080-rp-integration.md section 4/5 - already live in
+-- production for arda, this is the same wire contract). Atlas is single-product
+-- here (it never dispatches provisioning events itself), so product_code is
+-- carried for payload/audit fidelity but is always 'atlas' in practice.
+--
+-- workspace_provisionings: current status per workspace (upserted on every
+-- valid event) + the monotonic `seq` (= payload.seq) used to ignore stale/
+-- out-of-order deliveries, per the wire contract's explicit requirement that
+-- delivery order is not guaranteed.
+CREATE TABLE provisioning.workspace_provisionings (
+    id               uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id     uuid         NOT NULL,
+    tenant_id        uuid,                                    -- rollup reverse-lookup only, cross-db bare value (boundary #1)
+    product_code     varchar(64)  NOT NULL DEFAULT 'atlas',
+    status           varchar(32)  NOT NULL DEFAULT 'pending',
+    seq              bigint       NOT NULL DEFAULT 0,          -- = payload.seq, monotonic per (workspace_id, product_code)
+    provisioned_at   timestamptz,
+    deprovisioned_at timestamptz,
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    updated_at       timestamptz  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_workspace_provisionings_workspace_product UNIQUE (workspace_id, product_code),
+    CONSTRAINT chk_workspace_provisionings_status CHECK (status IN ('pending', 'provisioned', 'deprovisioned'))
+);
+CREATE INDEX idx_workspace_provisionings_status ON provisioning.workspace_provisionings (status);
+
+-- webhook_deliveries: append-only idempotency ledger keyed on delivery_id
+-- (= X-Vxture-Delivery = payload.id). At-least-once delivery means retries of
+-- the SAME delivery_id are expected and must be recognized even when they
+-- would not change workspace_provisionings.seq.
+CREATE TABLE provisioning.webhook_deliveries (
+    id           uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+    delivery_id  varchar(128) NOT NULL,
+    workspace_id uuid         NOT NULL,
+    product_code varchar(64)  NOT NULL DEFAULT 'atlas',
+    event_type   varchar(64)  NOT NULL,
+    seq          bigint       NOT NULL,
+    received_at  timestamptz  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_webhook_deliveries_delivery_id UNIQUE (delivery_id)
+);
+CREATE INDEX idx_webhook_deliveries_workspace ON provisioning.webhook_deliveries (workspace_id, seq);
