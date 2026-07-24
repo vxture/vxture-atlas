@@ -6,10 +6,12 @@ import {
   Inject,
   Post,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 
 import { ModelRuntimeService } from "./runtime.service";
 import { ModelRegistryService } from "../registry/model-registry.service";
+import { S2sAuthGuard } from "./guards/s2s-auth.guard";
 import type {
   AiModelRecord,
   ChatRequest,
@@ -35,6 +37,7 @@ interface ModelRuntimeResponse {
 }
 
 @Controller("model-platform")
+@UseGuards(S2sAuthGuard)
 export class ModelRuntimeController {
   constructor(
     @Inject(ModelRuntimeService)

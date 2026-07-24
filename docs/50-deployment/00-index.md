@@ -1,14 +1,20 @@
 # 50-deployment - Infra, CI/CD, environments, bootstrap checklists
 
-## Infra allocation (unassigned)
+## Infra allocation
+
+Host assignment **owner-confirmed 2026-07-24** (see `docs/70-workplan/00-index.md`
+Phase 6). Still needs mirroring into vxture-platform's own
+`docs/50-deployment/13-infra-allocation-registry.md` product row (out of this
+repo's write-scope) before it's the cross-repo source of truth, and still
+needs real secrets/GitHub Environment before a deploy can actually run.
 
 | Item | Value |
 |------|-------|
-| Deploy host | **unassigned** - see vxture-platform `docs/50-deployment/13-infra-allocation-registry.md` section 3, atlas row (all TBD as of this scaffold) |
-| Stack root | `/srv/md0/atlas` (placeholder, pending host assignment) |
-| Published port | `3100` (unchanged from the in-monorepo service) |
+| Deploy host | **worker-02** (`100.76.219.48`, business host - same as arda/varda/vxtpl) |
+| Stack root | `/srv/md0/atlas` |
+| Published port | `3100` (fixed - inherited from the in-monorepo `model-platform` service; not a fresh `32X0/32X1` app-profile pair. No beta port yet - beta tier stays out per TD-001 until a dedicated beta host exists) |
 | Public domain | `atlas.vxture.com` (reserved, not bound - Atlas is tailnet-only today; no edge vhost is scaffolded here, unlike karda, because Atlas currently has no browser-facing surface for a vhost to protect) |
-| Tailnet | class TBD, pending host assignment |
+| Tailnet | class 2 (same-apex platform tailnet fabric, per `product_230_mesh-architecture.md` D1) |
 | ACR namespace | TBD (repo `vars.ALIYUN_ACR_NAMESPACE`, never hardcoded) |
 
 ## GitHub bootstrap (one-time, not yet done)

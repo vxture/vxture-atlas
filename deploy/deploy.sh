@@ -17,7 +17,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/atlas (host TBD - see docs/50-deployment/00-index.md)
+ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/atlas on worker-02 - see docs/50-deployment/00-index.md
 ENV_FILE="$ROOT/etc/.env"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 
