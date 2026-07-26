@@ -75,10 +75,15 @@ ACR 主备顺序已定），仍然卡住的纯 owner/平台动作：
 - `vxture-platform` 自己的 `docs/50-deployment/13-infra-allocation-registry.md` atlas 行仍是
   "待分配"占位，需要同步 worker-02 的实际分配（worker-02、`/srv/md0/atlas`、端口 3100、
   tailnet class 2）——这个文件在 `vxture-platform` 仓库，不在 Atlas 写权限范围。
-- Atlas 自己仓库这边：`production` GitHub Environment 尚未创建，`DEPLOY_HOST`/`DEPLOY_USER`/
-  `DEPLOY_SSH_KEY`/`DEPLOY_KNOWN_HOSTS`/`DEPLOY_DIR`/`ENV_FILE_BASE64` 等部署密钥一个都没配置
-  （2026-07-26 用 `gh api`/`gh secret list` 核实）。`DEPLOY_KNOWN_HOSTS` 尤其需要从可信网络对
-  worker-02 实测 `ssh-keyscan` 采集，不是能凭空生成的。
+- **2026-07-27 更新**：部署密钥已从 `DEPLOY_*` 重命名为 `DEPLOY_WORKER02_*`
+  （`HOST`/`USER`/`PORT`/`KNOWN_HOSTS`/`SSH_KEY`/`SSH_KEY_PASSPHRASE`），现在是
+  **组织级共享 secrets**，可见范围覆盖 10 个部署到 worker-02 的仓库（arda/karda/atlas +
+  terra/ontos/runa + 4 个 agent 仓库）——Atlas 侧的 `deploy.yml`/`db-init.yml`/`rollback.yml`
+  已同步改名引用（PR #22）。`DEPLOY_DIR`/`ENV_FILE_BASE64` 保持不变，按设计是逐产品的，
+  不是主机指向问题。**仍然没有的**：`production` GitHub Environment 尚未创建；这组组织级
+  secrets 实际的值（host/user/port/known_hosts/ssh key）是否已经真实配置到位，需要另行
+  核实——本函只确认了引用已经改名，不代表凭证已经可用。`DEPLOY_WORKER02_KNOWN_HOSTS`
+  尤其需要从可信网络对 worker-02 实测 `ssh-keyscan` 采集，不是能凭空生成的。
 
 ### 2.4 provider-keys 管理 UI（TD-007）
 
