@@ -28,13 +28,18 @@ const svc = new ModelRuntimeService(
   null as any,
   null as any,
   null as any,
+  null as any,
 );
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const validate = (req: unknown): void => (svc as any).validateChatRequest(req);
 
-const resolveKey = (model: AiModelRecord): string => resolveApiKey(model);
+const noopResolveManagedKey = (): Promise<string | null> =>
+  Promise.resolve(null);
+
+const resolveKey = (model: AiModelRecord): Promise<string> =>
+  resolveApiKey({ resolveManagedKey: noopResolveManagedKey }, model);
 
 function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
   return {
@@ -219,57 +224,61 @@ describe("resolveApiKey", () => {
     process.env = savedEnv;
   });
 
-  it("returns empty string when config is null", () => {
-    expect(resolveKey(makeModel({ config: null }))).toBe("");
+  it("returns empty string when config is null", async () => {
+    expect(await resolveKey(makeModel({ config: null }))).toBe("");
   });
 
-  it("returns empty string when config has no apiKeyEnvVar", () => {
-    expect(resolveKey(makeModel({ config: { foo: "bar" } }))).toBe("");
+  it("returns empty string when config has no apiKeyEnvVar", async () => {
+    expect(await resolveKey(makeModel({ config: { foo: "bar" } }))).toBe("");
   });
 
-  it("returns empty string when apiKeyEnvVar is not a string", () => {
-    expect(resolveKey(makeModel({ config: { apiKeyEnvVar: 42 } }))).toBe("");
+  it("returns empty string when apiKeyEnvVar is not a string", async () => {
+    expect(await resolveKey(makeModel({ config: { apiKeyEnvVar: 42 } }))).toBe(
+      "",
+    );
   });
 
-  it("returns empty string when apiKeyEnvVar is an empty string", () => {
-    expect(resolveKey(makeModel({ config: { apiKeyEnvVar: "" } }))).toBe("");
+  it("returns empty string when apiKeyEnvVar is an empty string", async () => {
+    expect(await resolveKey(makeModel({ config: { apiKeyEnvVar: "" } }))).toBe(
+      "",
+    );
   });
 
-  it("returns the env var value when it is set", () => {
+  it("returns the env var value when it is set", async () => {
     process.env["TEST_API_KEY"] = "sk-test-123";
     expect(
-      resolveKey(makeModel({ config: { apiKeyEnvVar: "TEST_API_KEY" } })),
+      await resolveKey(makeModel({ config: { apiKeyEnvVar: "TEST_API_KEY" } })),
     ).toBe("sk-test-123");
   });
 
-  it("throws provider unavailable when env var is missing for a public provider", () => {
+  it("throws provider unavailable when env var is missing for a public provider", async () => {
     delete process.env["MISSING_KEY"];
-    expect(() =>
+    await expect(
       resolveKey(
         makeModel({
           provider: "openai",
           config: { apiKeyEnvVar: "MISSING_KEY" },
         }),
       ),
-    ).toThrow(ModelRuntimeException);
+    ).rejects.toThrow(ModelRuntimeException);
   });
 
-  it("throws for doubao provider when env var is missing", () => {
+  it("throws for doubao provider when env var is missing", async () => {
     delete process.env["DOUBAO_KEY"];
-    expect(() =>
+    await expect(
       resolveKey(
         makeModel({
           provider: "doubao",
           config: { apiKeyEnvVar: "DOUBAO_KEY" },
         }),
       ),
-    ).toThrow(ModelRuntimeException);
+    ).rejects.toThrow(ModelRuntimeException);
   });
 
-  it('returns empty string for "private" provider when env var is missing (P1 regression guard)', () => {
+  it('returns empty string for "private" provider when env var is missing (P1 regression guard)', async () => {
     delete process.env["PRIVATE_KEY"];
     expect(
-      resolveKey(
+      await resolveKey(
         makeModel({
           provider: "private",
           config: { apiKeyEnvVar: "PRIVATE_KEY" },
@@ -278,10 +287,10 @@ describe("resolveApiKey", () => {
     ).toBe("");
   });
 
-  it('returns empty string for "custom" provider when env var is missing (P1 regression guard)', () => {
+  it('returns empty string for "custom" provider when env var is missing (P1 regression guard)', async () => {
     delete process.env["CUSTOM_KEY"];
     expect(
-      resolveKey(
+      await resolveKey(
         makeModel({
           provider: "custom",
           config: { apiKeyEnvVar: "CUSTOM_KEY" },
@@ -290,16 +299,42 @@ describe("resolveApiKey", () => {
     ).toBe("");
   });
 
-  it('returns empty string for "self-hosted" provider when env var is missing (P1 regression guard)', () => {
+  it('returns empty string for "self-hosted" provider when env var is missing (P1 regression guard)', async () => {
     delete process.env["SELFHOSTED_KEY"];
     expect(
-      resolveKey(
+      await resolveKey(
         makeModel({
           provider: "self-hosted",
           config: { apiKeyEnvVar: "SELFHOSTED_KEY" },
         }),
       ),
     ).toBe("");
+  });
+
+  it("resolves via the provider-key vault when managedKeyAlias is set", async () => {
+    const resolveManagedKey = vi.fn().mockResolvedValue("sk-managed-456");
+    const apiKey = await resolveApiKey(
+      { resolveManagedKey },
+      makeModel({
+        provider: "doubao",
+        config: { managedKeyAlias: "primary" },
+      }),
+    );
+    expect(apiKey).toBe("sk-managed-456");
+    expect(resolveManagedKey).toHaveBeenCalledWith("doubao", "primary");
+  });
+
+  it("throws provider unavailable when managedKeyAlias has no active key for a public provider", async () => {
+    const resolveManagedKey = vi.fn().mockResolvedValue(null);
+    await expect(
+      resolveApiKey(
+        { resolveManagedKey },
+        makeModel({
+          provider: "openai",
+          config: { managedKeyAlias: "missing" },
+        }),
+      ),
+    ).rejects.toThrow(ModelRuntimeException);
   });
 });
 
@@ -377,6 +412,9 @@ describe("ModelRuntimeService runtime flow", () => {
       record: vi.fn().mockResolvedValue(undefined),
       ...overrides.metering,
     };
+    const providerKeys = {
+      resolveKey: vi.fn().mockResolvedValue(null),
+    };
 
     return {
       service: new ModelRuntimeService(
@@ -384,6 +422,7 @@ describe("ModelRuntimeService runtime flow", () => {
         router as never,
         quota as never,
         metering as never,
+        providerKeys as never,
       ),
       provider,
       fallbackProvider,

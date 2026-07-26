@@ -49,14 +49,16 @@ function makeService(
         ),
   };
   const router = { resolve: vi.fn().mockReturnValue(provider) };
+  const providerKeys = { resolveKey: vi.fn().mockResolvedValue(null) };
 
   const service = new RerankService(
     registry as never,
     router as never,
     quota as never,
+    providerKeys as never,
   );
 
-  return { service, registry, quota, router, provider };
+  return { service, registry, quota, router, provider, providerKeys };
 }
 
 const CANDIDATES = [{ id: "c1", text: "candidate one" }];

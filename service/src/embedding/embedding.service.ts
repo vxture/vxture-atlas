@@ -3,6 +3,7 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { ModelRouterService } from "../router/model-router.service";
 import { QuotaService } from "../quota/quota.service";
+import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import {
   resolveGatedModel,
   toS2sProviderError,
@@ -18,13 +19,20 @@ export class EmbeddingService {
     private readonly router: ModelRouterService,
     @Inject(QuotaService)
     private readonly quota: QuotaService,
+    @Inject(ProviderKeyService)
+    private readonly providerKeys: ProviderKeyService,
   ) {}
 
   async embed(request: EmbedRequest): Promise<EmbedResponse> {
     this.validate(request);
 
     const gated = await resolveGatedModel(
-      { registry: this.registry, router: this.router, quota: this.quota },
+      {
+        registry: this.registry,
+        router: this.router,
+        quota: this.quota,
+        providerKeys: this.providerKeys,
+      },
       { ...request, tenantId: request.workspaceId },
     );
 

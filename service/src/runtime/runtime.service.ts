@@ -17,6 +17,7 @@ import { resolveApplicationScope } from "../quota/quota.service";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { ModelRuntimeErrorResponse } from "./runtime.errors";
 import { resolveApiKey } from "./resolve-api-key";
+import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import type {
   AiModelRecord,
   ChatRequest,
@@ -38,7 +39,14 @@ export class ModelRuntimeService {
     private readonly quota: QuotaService,
     @Inject(MeteringService)
     private readonly metering: MeteringService,
+    @Inject(ProviderKeyService)
+    private readonly providerKeys: ProviderKeyService,
   ) {}
+
+  private readonly resolveManagedKey = (
+    providerCode: string,
+    keyAlias: string,
+  ): Promise<string | null> => this.providerKeys.resolveKey(providerCode, keyAlias);
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     this.validateChatRequest(request);
@@ -99,7 +107,7 @@ export class ModelRuntimeService {
 
         try {
           const provider = this.router.resolve(model.provider, model.modelCode);
-          const apiKey = resolveApiKey(model, requestId);
+          const apiKey = await resolveApiKey({ resolveManagedKey: this.resolveManagedKey }, model, requestId);
           this.logRuntimeEvent("model_runtime_provider_start", {
             request,
             requestId,
@@ -301,7 +309,7 @@ export class ModelRuntimeService {
 
         try {
           const provider = this.router.resolve(model.provider, model.modelCode);
-          const apiKey = resolveApiKey(model, requestId);
+          const apiKey = await resolveApiKey({ resolveManagedKey: this.resolveManagedKey }, model, requestId);
           this.logRuntimeEvent("model_runtime_provider_stream_start", {
             request,
             requestId,

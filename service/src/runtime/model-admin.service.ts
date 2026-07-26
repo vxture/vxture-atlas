@@ -32,16 +32,22 @@ const APPLICATION_TYPES = new Set<ApplicationType>([
 ]);
 
 const SECRET_CONFIG_KEY_PATTERN =
-  /^(api[-_]?key|apiKeyEnvVar|secret|token|password|credential|access[-_]?token|refresh[-_]?token|bearer[-_]?token)$/i;
+  /^(api[-_]?key|apiKeyEnvVar|managedKeyAlias|secret|token|password|credential|access[-_]?token|refresh[-_]?token|bearer[-_]?token)$/i;
 
+/**
+ * source "managed" resolves via the provider-key vault (Phase A envelope
+ * encryption, see provider-keys/) by (model.provider, name=keyAlias) - no
+ * redeploy needed to add/rotate. source "env" is the legacy path, kept for
+ * back-compat with models already configured against it.
+ */
 export interface ModelKeyReference {
-  source: "env";
+  source: "env" | "managed";
   name: string;
   configured: boolean;
 }
 
 export interface ModelKeyReferenceInput {
-  source?: "env";
+  source?: "env" | "managed";
   name?: string | null;
 }
 
@@ -1301,15 +1307,20 @@ function sanitizeWritableConfig(
 
 function mergeModelConfig(
   config: ModelConfig | null,
-  keyReferenceName: string | null | undefined,
+  keyReference: NormalizedKeyReference | null | undefined,
 ): ModelConfig | null {
-  if (keyReferenceName === undefined) return config;
+  if (keyReference === undefined) return config;
 
   const nextConfig = { ...(config ?? {}) };
   delete nextConfig["apiKeyEnvVar"];
+  delete nextConfig["managedKeyAlias"];
 
-  if (keyReferenceName) {
-    nextConfig["apiKeyEnvVar"] = keyReferenceName;
+  if (keyReference) {
+    if (keyReference.source === "managed") {
+      nextConfig["managedKeyAlias"] = keyReference.name;
+    } else {
+      nextConfig["apiKeyEnvVar"] = keyReference.name;
+    }
   }
 
   return Object.keys(nextConfig).length > 0 ? nextConfig : null;
@@ -1338,6 +1349,17 @@ function sanitizeConfigValue(value: unknown): unknown {
 function readKeyReference(
   config: ModelConfig | null,
 ): ModelKeyReference | null {
+  const managedKeyAlias = config?.["managedKeyAlias"];
+  if (typeof managedKeyAlias === "string" && managedKeyAlias.trim()) {
+    return {
+      source: "managed",
+      name: managedKeyAlias.trim(),
+      // Existence is verified at request time against the provider-key vault,
+      // not synchronously here - a managed reference is presumed configured.
+      configured: true,
+    };
+  }
+
   const apiKeyEnvVar = config?.["apiKeyEnvVar"];
   if (typeof apiKeyEnvVar !== "string" || !apiKeyEnvVar.trim()) return null;
 
@@ -1355,24 +1377,33 @@ function hasKeyReferenceInput(
   return body.apiKeyEnvVar !== undefined || body.keyReference !== undefined;
 }
 
+interface NormalizedKeyReference {
+  source: "env" | "managed";
+  name: string;
+}
+
 function normalizeKeyReferenceName(
   body: Pick<CreateAiModelBody, "apiKeyEnvVar" | "keyReference">,
-): string | null | undefined {
+): NormalizedKeyReference | null | undefined {
   if (body.keyReference !== undefined) {
     if (body.keyReference === null) return null;
 
-    if (
-      body.keyReference.source !== undefined &&
-      body.keyReference.source !== "env"
-    ) {
+    const requestedSource: string = body.keyReference.source ?? "env";
+    if (requestedSource !== "env" && requestedSource !== "managed") {
       throwValidationError("keyReference.source is invalid", "keyReference");
     }
+    const source = requestedSource as "env" | "managed";
 
-    return optionalString(body.keyReference.name);
+    const name = optionalString(body.keyReference.name);
+    if (!name) return null;
+
+    return { source, name };
   }
 
   if (body.apiKeyEnvVar !== undefined) {
-    return optionalString(body.apiKeyEnvVar);
+    const name = optionalString(body.apiKeyEnvVar);
+    if (!name) return null;
+    return { source: "env", name };
   }
 
   return undefined;

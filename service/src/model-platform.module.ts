@@ -24,6 +24,9 @@ import { ParseService } from "./parse/parse.service";
 import { ProvisioningWebhookController } from "./provisioning/provisioning-webhook.controller";
 import { ProvisioningWebhookService } from "./provisioning/provisioning-webhook.service";
 import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webhook.repository";
+import { ProviderKeyController } from "./provider-keys/provider-key.controller";
+import { ProviderKeyService } from "./provider-keys/provider-key.service";
+import { ProviderKeyRepository } from "./provider-keys/provider-key.repository";
 
 @Module({
   controllers: [
@@ -35,6 +38,7 @@ import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webho
     RerankController,
     ParseController,
     ProvisioningWebhookController,
+    ProviderKeyController,
   ],
   providers: [
     ModelRuntimeService,
@@ -53,6 +57,8 @@ import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webho
     ParseService,
     ProvisioningWebhookService,
     ProvisioningWebhookRepository,
+    ProviderKeyService,
+    ProviderKeyRepository,
   ],
   exports: [
     ModelRuntimeService,
@@ -64,6 +70,7 @@ import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webho
     EmbeddingService,
     RerankService,
     ParseService,
+    ProviderKeyService,
   ],
 })
 export class ModelPlatformModule {}
