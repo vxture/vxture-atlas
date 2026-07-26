@@ -216,23 +216,26 @@ jobs:
             "grep -qE 'container_name:.*-db$' '$deploy_dir/docker-compose.yml' && echo '[deliver] compose declares a db service' || { echo '[deliver] ERROR: delivered compose has no db service' >&2; exit 1; }"
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "printf '%s\n' '$PASSED_SHA' > '$deploy_dir/VERSION'"
 
-          # Remote deploy script: registry primary/fallback per host profile
-          # (governance section 5) - fill in once the deploy host is assigned.
+          # Remote deploy script: registry primary/fallback for worker-02.
+          # Owner decision 2026-07-26 - ACR primary / GHCR fallback. This is a
+          # deliberate deviation from governance section 5's default for
+          # non-VPC hosts (GHCR primary) - see docs/50-deployment/00-index.md
+          # for the recorded reasoning.
           cat > /tmp/deploy.sh <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd "$REPO_DIR"
-          export IMAGE_REGISTRY="ghcr.io"
-          export IMAGE_NAMESPACE="vxture"
+          export IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
+          export IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
           export IMAGE_TAG="$IMAGE_TAG"
-          export FALLBACK_IMAGE_REGISTRY="$ALIYUN_ACR_REGISTRY"
-          export FALLBACK_IMAGE_NAMESPACE="$ALIYUN_ACR_NAMESPACE"
-          if [ -n "${GHCR_TOKEN:-}" ]; then
-            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          fi
+          export FALLBACK_IMAGE_REGISTRY="ghcr.io"
+          export FALLBACK_IMAGE_NAMESPACE="vxture"
           if [ -n "${ALIYUN_ACR_USERNAME:-}" ] && [ -n "${ALIYUN_ACR_PASSWORD:-}" ]; then
             for attempt in 1 2 3 4 5; do
               printf '%s' "$ALIYUN_ACR_PASSWORD" | timeout 45 docker login "$ALIYUN_ACR_REGISTRY" -u "$ALIYUN_ACR_USERNAME" --password-stdin && break || sleep $((attempt * 5))
             done
+          fi
+          if [ -n "${GHCR_TOKEN:-}" ]; then
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           fi
           bash deploy.sh all
           bash deploy.sh verify

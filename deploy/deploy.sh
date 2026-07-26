@@ -2,13 +2,17 @@
 # On-host deployment lifecycle for the atlas production stack. Invoked by CI
 # (deploy.yml / rollback.yml) after the image build.
 #
-#   bash deploy.sh all       # directories -> start -> verify
-#   bash deploy.sh start     # pull image (GHCR primary, ACR fallback) + up -d
+#   bash deploy.sh all       # directories -> start -> verify -> prune
+#   bash deploy.sh start     # pull image (primary, then fallback) + up -d
 #   bash deploy.sh verify    # health check
+#   bash deploy.sh prune     # remove unreferenced images (frees old sha-* tags)
 #
 # The image tag + registries come from the environment CI sets:
-#   IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG (primary = GHCR),
-#   FALLBACK_IMAGE_REGISTRY / FALLBACK_IMAGE_NAMESPACE (ACR).
+#   IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG (primary),
+#   FALLBACK_IMAGE_REGISTRY / FALLBACK_IMAGE_NAMESPACE (fallback).
+# worker-02: ACR primary / GHCR fallback (owner decision 2026-07-26, deviates
+# from governance section 5's non-VPC default - see deploy.yml and
+# docs/50-deployment/00-index.md).
 #
 # Memory-constrained hosts (governance section 4): if the assigned deploy host
 # is a 2C2G-class box (not a data-array box with room for old+new containers),
@@ -86,11 +90,22 @@ cmd_verify() {
   exit 1
 }
 
+cmd_prune() {
+  # Every deploy pushes/pulls a new immutable sha-<short> app image tag
+  # (build.yml) - without cleanup these accumulate on the host disk forever.
+  # `docker image prune -af` (not `-a` alone) removes only images with no
+  # container referencing them - the currently-running tag is never a
+  # candidate, so this is safe to run unconditionally after a verified deploy.
+  docker image prune -af >/dev/null 2>&1 || true
+  log "pruned unreferenced images"
+}
+
 cmd_all() {
   cmd_environment
   cmd_directories
   cmd_start
   cmd_verify
+  cmd_prune
 }
 
 case "${1:-}" in
@@ -99,5 +114,6 @@ case "${1:-}" in
   directories) cmd_directories ;;
   start)       cmd_start ;;
   verify)      cmd_verify ;;
-  *) echo "usage: bash deploy.sh {all|environment|directories|start|verify}"; exit 1 ;;
+  prune)       cmd_prune ;;
+  *) echo "usage: bash deploy.sh {all|environment|directories|start|verify|prune}"; exit 1 ;;
 esac
