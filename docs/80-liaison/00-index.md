@@ -11,6 +11,7 @@ index so the docs numbering guardrail still passes
 | Letter | Stamp | To | Subject | Status |
 |--------|-------|----|---------|--------|
 | `10-2607241030-atlas-reply-to-karda-capability-requirements.md` | 2607241030 | karda line | Immediate answers to the two items karda asked for before finalizing its own design: G1 (429 rate-limit vs quota-exhaustion - decided now, contract shape final) and A3.3 (rerank latency - honestly deferred, no number promised until real benchmark; commits to proactively reporting once measured) | Draft only - send once this repo has a real GitHub remote |
+| `20-2607261200-atlas-provider-key-ui-handoff.md` | 2607261200 | platform line (admin-bff/console-bff/portals maintainers) | `model-platform/admin/provider-keys*` (TD-006) has no admin/console UI or BFF coverage, unlike every other model-platform resource - requests platform side add it following the existing providers pattern | Draft only - recorded as TD-007 |
 
 ## Received
 

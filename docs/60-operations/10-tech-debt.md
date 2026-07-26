@@ -21,6 +21,7 @@ repo-split plan itself - not discovered later.
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
 | TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
+| TD-007 | Provider-key vault (`model-platform/admin/provider-keys*`) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -258,3 +259,40 @@ repo-split plan itself - not discovered later.
   secrets manager for unrelated reasons, the envelope-encryption schema in
   `service/src/provider-keys/` does not need to change to adopt it then -
   only the master-key-loading function would swap.
+
+## TD-007 - provider-key vault has no admin/console UI or BFF coverage
+
+- **What is missing**: every other model-platform resource
+  (providers/models/grants/price-rules/policies/quotas/usage-summaries) has a
+  working admin/console UI in `vxture-platform`
+  (`portals/admin/src/modules/ai/ModelPlatformPage.tsx`,
+  `ModelGrantsPage.tsx`, `portals/console/.../model-platform/`,
+  `.../quotas/`) backed by typed BFF routers
+  (`bff/admin-bff/src/routers/model-platform.router.ts`,
+  `bff/console-bff/src/routers/model-platform.router.ts`) that proxy to
+  Atlas's `model-platform/admin/*` API. The provider-key vault added in
+  TD-006 (`model-platform/admin/provider-keys*` -
+  list/create/rotate/activate/deactivate) has no equivalent - an operator
+  can only manage provider keys by calling the API directly (`curl`/Postman
+  with a valid S2S token), not through either portal.
+- **Why it is debt, not just unscheduled**: this breaks the pattern every
+  other resource already follows (UI and direct API calls both drive the
+  same backing endpoint, no separate mutation path) and leaves the one
+  resource type operators are most likely to touch routinely (onboarding a
+  new third-party provider) as the one with no operator-facing surface at
+  all - the opposite of what TD-006 was for (making that a routine,
+  low-friction operation).
+- **Recovery condition**: `vxture-platform` adds a "Provider Keys" section to
+  `ModelPlatformPage.tsx` (or a new page) plus the matching admin-bff/
+  console-bff router entries, following the exact shape already established
+  for providers (list/create/activate/deactivate, with rotate as an
+  additional action) - the API surface it would call
+  (`model-platform/admin/provider-keys*`) already exists and is stable.
+- **Why this is not implemented in this repo**: `vxture-atlas` is a
+  services-profile repo with no `portals/` (product_240 section 2.5) - the
+  UI and BFF code both live in `vxture-platform`, out of this repo's
+  write-scope. Recording here per the platform's deviation-reporting
+  discipline (this file's header) rather than silently leaving the gap
+  undocumented.
+- **Report to platform line**: handoff letter drafted,
+  `docs/80-liaison/20-2607261200-atlas-provider-key-ui-handoff.md`.
