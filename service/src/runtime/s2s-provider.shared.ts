@@ -21,6 +21,7 @@ import { ProviderCapabilityNotImplementedError } from "../providers/base.provide
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { ModelRouterService } from "../router/model-router.service";
 import { QuotaService, type QuotaCheckRequest } from "../quota/quota.service";
+import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import { resolveApiKey } from "./resolve-api-key";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { AiModelRecord, IModelProvider } from "../types/runtime.types";
@@ -42,6 +43,7 @@ export async function resolveGatedModel(
     registry: ModelRegistryService;
     router: ModelRouterService;
     quota: QuotaService;
+    providerKeys: ProviderKeyService;
   },
   request: S2sProviderRequestBase,
 ): Promise<GatedModel> {
@@ -49,7 +51,14 @@ export async function resolveGatedModel(
   const model = await deps.registry.getActiveModel(request.modelCode);
   await deps.quota.assertAllowed(model, request);
   const provider = deps.router.resolve(model.provider, model.modelCode);
-  const apiKey = resolveApiKey(model, requestId);
+  const apiKey = await resolveApiKey(
+    {
+      resolveManagedKey: (providerCode, keyAlias) =>
+        deps.providerKeys.resolveKey(providerCode, keyAlias),
+    },
+    model,
+    requestId,
+  );
 
   return { model, provider, apiKey, requestId };
 }

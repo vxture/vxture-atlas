@@ -56,6 +56,29 @@ export interface WebhookDeliveryRow {
   receivedAt: Date;
 }
 
+/** key.provider_api_keys row - encryptedKey is envelope-encrypted ciphertext, never plaintext. */
+export interface ProviderApiKeyRow {
+  id: string;
+  providerCode: string;
+  keyAlias: string;
+  encryptedKey: Buffer;
+  encryptionKeyId: string;
+  keyScope: string;
+  isActive: boolean;
+  lastRotatedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** key.key_rotation_logs row (append-only audit trail). */
+export interface KeyRotationLogRow {
+  id: string;
+  providerApiKeyId: string;
+  rotatedBy: string | null;
+  reason: string | null;
+  rotatedAt: Date;
+}
+
 type PrismaArgs = Record<string, unknown>;
 
 interface PrismaMutationResult {
@@ -79,6 +102,8 @@ export interface ModelPlatformPrismaClient {
   modelPolicy: PrismaDelegate<ModelPolicyRecord>;
   workspaceProvisioning: PrismaDelegate<WorkspaceProvisioningRow>;
   webhookDelivery: PrismaDelegate<WebhookDeliveryRow>;
+  providerApiKey: PrismaDelegate<ProviderApiKeyRow>;
+  keyRotationLog: PrismaDelegate<KeyRotationLogRow>;
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
   $transaction<T>(

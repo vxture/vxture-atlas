@@ -20,6 +20,7 @@ repo-split plan itself - not discovered later.
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
+| TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | Phase A closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); Phase B (external KMS/Vault for the master key) still open |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -211,3 +212,36 @@ repo-split plan itself - not discovered later.
   it does **not** implement real C2/C3 wiring, which per TD-002's progress
   note is blocked on the platform's `product.agent_catalog` and out of this
   repo's control.
+
+## TD-006 - provider API keys are env-var only (redeploy required to onboard/rotate)
+
+- **What was missing**: `resolveApiKey` (`service/src/runtime/resolve-api-key.ts`)
+  only read `process.env[model.config.apiKeyEnvVar]` - every new provider or
+  key rotation required setting an env var and redeploying the service. The
+  `key` schema (`key.provider_api_keys`/`key.key_rotation_logs`,
+  `deploy/database/ddl/00_baseline.sql`) was designed for envelope-encrypted
+  storage from the start but the Prisma proxy was never wired to any service
+  code (see the migration note at the top of the `key` schema block in
+  `service/prisma/schema.prisma`).
+- **Why it is debt**: onboarding a third-party model provider is meant to be
+  a routine, frequent operation (platform's operator console driving Atlas's
+  `model-platform/admin` API) - forcing a deploy for every key defeats that
+  and was flagged explicitly as unacceptable.
+- **Recovery condition / Phase A (closed 2026-07-26)**: `service/src/provider-keys/`
+  implements envelope encryption in-process (AES-256-GCM, `provider-key-crypto.ts`) -
+  the master key set (`PROVIDER_KEY_ENCRYPTION_KEYS`/
+  `PROVIDER_KEY_ENCRYPTION_ACTIVE_KEY_ID`) is still env-configured, but it is
+  the rarely-rotated *master* key, not a per-provider secret. `ProviderKeyService`
+  + `POST/PUT /model-platform/admin/provider-keys*` (S2sAuthGuard-protected,
+  metadata-only responses - plaintext is write-only, never echoed) let an
+  operator add or rotate a provider key as a plain DB write, no redeploy.
+  `AiModelRecord.config.managedKeyAlias` (new, alongside the legacy
+  `apiKeyEnvVar`/`keyReference.source: "env"`) selects `source: "managed"` in
+  `model-admin.service.ts`'s `ModelKeyReference`, resolved at request time via
+  `resolveApiKey`'s `resolveManagedKey` dependency - wired into the chat,
+  embed, rerank, and parse paths identically.
+- **Still open / Phase B**: the master key itself is still env-configured
+  (rotated rarely, ops event, not per-provider) - swapping its source to an
+  external KMS/Vault Transit unwrap call is a clean follow-up once the
+  platform stands up that shared infrastructure; the envelope-encryption
+  schema/abstraction does not need to change for that swap.
