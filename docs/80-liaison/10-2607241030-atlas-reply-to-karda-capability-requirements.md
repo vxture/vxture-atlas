@@ -1,7 +1,12 @@
 # atlas → karda：对 `100-2607240931` 能力需求的两项即时回复
 
-> **状态：草稿，暂存本 scaffold，尚未发出**——vxture-atlas 仓库尚未正式建仓/推送，此信待 Phase 1
-> 落地、仓库有实际 GitHub 地址后，作为 atlas 仓第一封出函正式发送（karda 同时也会收到通知）。
+> **状态：内容仍然有效，发送状态需要更正**——本函原先标注"待仓库有实际 GitHub 地址后发送"，
+> 但 Phase 1（仓库骨架、CI、真实 GitHub 远程）已经在 2026-07-24 完成并持续有真实 PR 合并
+> （github.com/vxture/vxture-atlas），发送前提早已满足，只是这条状态说明当时没有跟着更新。
+> G1/A3.3 的回复内容本身未过时——G1 契约形状已实现且未变；A3.3 仍然是真实压测阻塞项（见
+> `docs/60-operations/10-tech-debt.md` TD-003），承诺"实现+部署后主动回信"仍然有效、仍未兑现。
+> 是否要通过正式渠道（如 vxture-karda 仓库开 issue）实际发出，需要人工确认后执行——这是一次
+> 跨仓库、对外可见的动作，本次仅更正文档状态，不代表已经发送。
 > **发件**：vxture-atlas（产品线）
 > **收件**：vxture-karda
 > **主题**：对 `docs/80-liaison/100-2607240931-karda-atlas-capability-requirements.md` 中

@@ -10,8 +10,9 @@ index so the docs numbering guardrail still passes
 
 | Letter | Stamp | To | Subject | Status |
 |--------|-------|----|---------|--------|
-| `10-2607241030-atlas-reply-to-karda-capability-requirements.md` | 2607241030 | karda line | Immediate answers to the two items karda asked for before finalizing its own design: G1 (429 rate-limit vs quota-exhaustion - decided now, contract shape final) and A3.3 (rerank latency - honestly deferred, no number promised until real benchmark; commits to proactively reporting once measured) | Draft only - send once this repo has a real GitHub remote |
+| `10-2607241030-atlas-reply-to-karda-capability-requirements.md` | 2607241030 | karda line | Immediate answers to the two items karda asked for before finalizing its own design: G1 (429 rate-limit vs quota-exhaustion - decided now, contract shape final) and A3.3 (rerank latency - honestly deferred, no number promised until real benchmark; commits to proactively reporting once measured) | Content still valid - status corrected 2026-07-27 (repo has had a real GitHub remote since Phase 1, 2026-07-24; the "not yet a real repo" send-blocker was stale). Actually sending (e.g. an issue in vxture-karda) still needs human confirmation |
 | `20-2607261200-atlas-provider-key-ui-handoff.md` | 2607261200 | platform line (admin-bff/console-bff/portals maintainers) | `model-platform/admin/provider-keys*` (TD-006) has no admin/console UI or BFF coverage, unlike every other model-platform resource - requests platform side add it following the existing providers pattern | Draft only - recorded as TD-007 |
+| `30-2607271000-atlas-platform-integration-readiness.md` | 2607271000 | platform line (admin-bff/console-bff/auth-bff/ops) | Consolidated status: what's ready to consume now (S2sAuthGuard-protected routes, provisioning webhook, admin API), and what's still blocked on platform (product.agent_catalog for TD-002/005, S2S token-exchange + BFF/varda caller wiring for TD-004, infra-allocation-registry sync + deploy secrets/Environment for TD-001/Phase 6) | Draft only - verified against current repo state 2026-07-27 |
 
 ## Received
 
