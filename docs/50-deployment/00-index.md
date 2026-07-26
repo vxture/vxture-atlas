@@ -67,11 +67,17 @@ job also covers this host.
 2. Create GitHub Environments: `production` (required reviewer) and, once a
    beta host exists, `beta` (no reviewer gate).
 3. Populate secrets/vars per `.env.example` and the workflow files under
-   `.github/workflows/` (`DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY`/
-   `DEPLOY_KNOWN_HOSTS`/`DEPLOY_DIR`, `ALIYUN_ACR_*`, `TAILSCALE_OAUTH_*`,
-   `NODE_AUTH_TOKEN`). Org-level shared credentials (ACR/tailscale/npm token)
-   only need this repo added to the sharing allowlist, not rebuilt.
-4. `DEPLOY_KNOWN_HOSTS` is mandatory (fail-closed in
+   `.github/workflows/` (`DEPLOY_WORKER02_HOST`/`DEPLOY_WORKER02_USER`/
+   `DEPLOY_WORKER02_SSH_KEY`/`DEPLOY_WORKER02_SSH_KEY_PASSPHRASE`/
+   `DEPLOY_WORKER02_KNOWN_HOSTS`/`DEPLOY_WORKER02_PORT`, `DEPLOY_DIR`,
+   `ALIYUN_ACR_*`, `TAILSCALE_OAUTH_*`, `NODE_AUTH_TOKEN`). The `DEPLOY_WORKER02_*`
+   secrets are org-level (renamed 2026-07-27 from the un-prefixed `DEPLOY_*`
+   names to make the target host explicit), shared to 10 repos deploying to
+   worker-02 (arda/karda/atlas + terra/ontos/runa + 4 agent repos) - this repo
+   only needs to be on the sharing allowlist, not populate them itself.
+   `DEPLOY_DIR` and `ENV_FILE_BASE64` stay per-product/repo-level (genuinely
+   product-specific, not a host-targeting concern) - not renamed.
+4. `DEPLOY_WORKER02_KNOWN_HOSTS` is mandatory (fail-closed in
    `.github/actions/tailnet-ssh-connect`) - collect via
    `ssh-keyscan -p <port> <host>` from a trusted network once the host exists.
 

@@ -51,7 +51,7 @@ schema 块顶部的迁移备注）。
 组织内目前**不存在任何 Vault/KMS/SOPS 类基础设施**——文档化的密钥管理现状
 （`vxture-platform/docs/10-standards/150-security.md` 1.3 节）是 GitHub
 Actions Secrets（CI/部署期）+ 主机上 chmod-600 的明文 `.env` 文件（运行期），
-Atlas 自己尚未实际执行的部署密钥（`DEPLOY_SSH_KEY`/ACR/tailscale）也是同一
+Atlas 自己尚未实际执行的部署密钥（`DEPLOY_WORKER02_SSH_KEY`/ACR/tailscale）也是同一
 套模式。为了这一个主密钥单独引入 Vault/KMS，会是组织里唯一一处、与其余所有
 密钥管理方式不一致的基础设施，边际收益不足以支撑这个不一致。
 
@@ -78,7 +78,7 @@ Atlas 自己尚未实际执行的部署密钥（`DEPLOY_SSH_KEY`/ACR/tailscale�
 **负面：**
 
 - 主密钥仍然是进程内 env 配置，泄露该 env 等同于泄露解密所有 provider 密钥
-  的能力——这个风险和组织现有的其他密钥（`DEPLOY_SSH_KEY` 等）处于同一
+  的能力——这个风险和组织现有的其他密钥（`DEPLOY_WORKER02_SSH_KEY` 等）处于同一
   信任级别，不是新增的薄弱点，但也没有比现状更强。
 - 如果组织未来出于其他原因（不只是这一个场景）决定上共享密钥管理设施，
   需要重新评估主密钥来源，但这不需要现在预先设计。
