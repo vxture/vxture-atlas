@@ -77,9 +77,9 @@ jobs:
       - name: Validate secrets
         shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_WORKER02_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_WORKER02_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_WORKER02_SSH_KEY }}
           TAILSCALE_OAUTH_CLIENT_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           TAILSCALE_OAUTH_CLIENT_SECRET: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
         run: |
@@ -96,19 +96,19 @@ jobs:
           tailscale-oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
           tailscale-oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
           tailscale-tag: ${{ vars.TAILSCALE_OAUTH_CLIENT_TAG }}
-          deploy-host: ${{ secrets.DEPLOY_HOST }}
-          deploy-port: ${{ secrets.DEPLOY_PORT }}
-          deploy-ssh-key: ${{ secrets.DEPLOY_SSH_KEY }}
-          deploy-ssh-passphrase: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
-          deploy-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          deploy-host: ${{ secrets.DEPLOY_WORKER02_HOST }}
+          deploy-port: ${{ secrets.DEPLOY_WORKER02_PORT }}
+          deploy-ssh-key: ${{ secrets.DEPLOY_WORKER02_SSH_KEY }}
+          deploy-ssh-passphrase: ${{ secrets.DEPLOY_WORKER02_SSH_KEY_PASSPHRASE }}
+          deploy-known-hosts: ${{ secrets.DEPLOY_WORKER02_KNOWN_HOSTS }}
 
       - name: Apply DDL over SSH
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_WORKER02_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_WORKER02_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_WORKER02_PORT }}
           DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
           PINNED_SHA: ${{ github.sha }}
         run: |
