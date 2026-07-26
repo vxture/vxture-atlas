@@ -57,12 +57,13 @@ per-workspace schema, unlike an asset-face product - Atlas's data model is
 global (model/grant/quota), not workspace-scoped, so there is nothing else to
 provision on receipt of this event today.
 
-**Provider-key vault (TD-006) - Phase A done 2026-07-26**: `service/src/provider-keys/`
+**Provider-key vault (TD-006) - done 2026-07-26**: `service/src/provider-keys/`
 adds envelope-encrypted provider-key storage (`key.provider_api_keys`, already
 DDL/Prisma-defined but unwired until now) with an admin CRUD surface
 (`model-platform/admin/provider-keys*`) - onboarding or rotating a provider
-key is now a DB write, not a redeploy. See TD-006 for the full design note and
-the still-open Phase B (external KMS/Vault for the master key).
+key is now a DB write, not a redeploy. The originally-planned Phase B
+(external KMS/Vault for the master key) was evaluated and dropped - no such
+infrastructure exists anywhere in the org; see TD-006 for the full note.
 
 ## Phase 4 - extraction mechanics
 
