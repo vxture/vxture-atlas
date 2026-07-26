@@ -15,7 +15,48 @@ needs real secrets/GitHub Environment before a deploy can actually run.
 | Published port | `3100` (fixed - inherited from the in-monorepo `model-platform` service; not a fresh `32X0/32X1` app-profile pair. No beta port yet - beta tier stays out per TD-001 until a dedicated beta host exists) |
 | Public domain | `atlas.vxture.com` (reserved, not bound - Atlas is tailnet-only today; no edge vhost is scaffolded here, unlike karda, because Atlas currently has no browser-facing surface for a vhost to protect) |
 | Tailnet | class 2 (same-apex platform tailnet fabric, per `product_230_mesh-architecture.md` D1) |
-| ACR namespace | TBD (repo `vars.ALIYUN_ACR_NAMESPACE`, never hardcoded) |
+| ACR namespace | **still TBD** - repo variable `ALIYUN_ACR_NAMESPACE` is not yet set for vxture-atlas (confirmed via `gh api orgs/vxture/actions/variables` 2026-07-26 - org-level `ALIYUN_ACR_REGISTRY` and the `ALIYUN_ACR_USERNAME`/`ALIYUN_ACR_PASSWORD` secrets are already shared to this repo, but the per-repo namespace is not). Blocks any real ACR pull until an Aliyun ACR repo/namespace exists for `atlas-app` and this repo variable is set to it - owner action, not agent-actionable. |
+
+## Registry primary/fallback (deviates from governance default)
+
+**Owner decision 2026-07-26: ACR primary, GHCR fallback** for worker-02
+(`.github/workflows/deploy.yml`, the remote deploy script's `IMAGE_REGISTRY`/
+`FALLBACK_IMAGE_REGISTRY` export). This is a deliberate deviation from
+`140-repo-governance-standard.md` section 5's default for non-VPC hosts (GHCR
+primary) - that default assumes ACR is only reachable over its paid public
+endpoint from a non-VPC host, with no guaranteed speed advantage over GHCR.
+The owner chose ACR-primary anyway for worker-02. If this is later found to
+be slower/costlier in practice than GHCR-primary (public ACR egress is
+billed; GHCR pulls are free), revisit here - this is a per-host operational
+choice, not itself a new governance rule, and does not need to propagate to
+sibling repos (arda/karda remain GHCR-primary on the same host) unless the
+owner decides otherwise.
+
+Build (`build.yml`) always pushes to both registries regardless of which is
+primary - only the deploy-side pull order is affected.
+
+## Docker registry mirror (base images, e.g. postgres)
+
+Already configured at the host-bootstrap level, not per-repo: worker-02's
+`/etc/docker/daemon.json` (`vxture-platform`'s
+`deploy-manual-init/bootstrap/11-bootstrap-host.sh`) sets
+`vp6xaxdh.mirror.aliyuncs.com` as the primary Docker Hub registry mirror
+(plus three fallback mirrors) - this speeds up pulling `postgres:16-alpine`
+(the only base image Atlas's stack pulls today; no nginx/redis service exists
+in `docker-compose.yml` yet, see its header comment). No Atlas-side change
+needed; worth a one-time ops check that this bootstrap script actually ran on
+worker-02.
+
+## Old image cleanup
+
+`deploy/deploy.sh`'s `cmd_all` now runs `cmd_prune` (`docker image prune -af`)
+after a verified deploy, since every deploy publishes a new immutable
+`sha-<short>` app image tag (`build.yml`) that would otherwise accumulate on
+the host disk indefinitely. Only images with zero referencing containers are
+removed - the currently-running tag is never a candidate. This is separate
+from (and does not replace) the platform-wide `docker image prune -af` in
+`vxture-platform`'s `31-regular-upgrade-platform.sh` maintenance job, if that
+job also covers this host.
 
 ## GitHub bootstrap (one-time, not yet done)
 
