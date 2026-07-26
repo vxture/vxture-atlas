@@ -99,8 +99,8 @@ class 2. Reflected in `docs/50-deployment/00-index.md` and TD-001 here.
 **Still open, blocking an actual deploy**: this repo's own docs are updated,
 but `vxture-platform`'s `docs/50-deployment/13-infra-allocation-registry.md`
 product-row (currently "待分配") still needs a matching update - out of
-write-scope for this repo/session; real secrets (`DEPLOY_SSH_KEY`,
-`DEPLOY_KNOWN_HOSTS`, ACR/tailscale credentials) and the GitHub
+write-scope for this repo/session; real secrets (`DEPLOY_WORKER02_SSH_KEY`,
+`DEPLOY_WORKER02_KNOWN_HOSTS`, ACR/tailscale credentials) and the GitHub
 `production` Environment are not yet created.
 
 ## Phase 7 - cutover and acceptance

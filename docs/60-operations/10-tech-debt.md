@@ -250,7 +250,7 @@ repo-split plan itself - not discovered later.
   GitHub Actions Secrets for CI/deploy-time plus chmod-600 plaintext `.env`
   files on the host at runtime (`/srv/vxture/runtime/secrets/*.env`) - the
   same pattern Atlas's own not-yet-exercised deploy secrets
-  (`DEPLOY_SSH_KEY`/ACR/tailscale) already use. Building a one-off Vault/KMS
+  (`DEPLOY_WORKER02_SSH_KEY`/ACR/tailscale) already use. Building a one-off Vault/KMS
   integration just for this master key would be inconsistent, single-purpose
   infrastructure for marginal benefit over what Phase A already delivers.
   Decision: **closed as-is** - the master key stays env-configured (a rare,
