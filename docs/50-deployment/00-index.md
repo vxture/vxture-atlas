@@ -12,10 +12,10 @@ needs real secrets/GitHub Environment before a deploy can actually run.
 |------|-------|
 | Deploy host | **worker-02** (`100.76.219.48`, business host - same as arda/varda/vxtpl) |
 | Stack root | `/srv/md0/atlas` |
-| Published port | `3100` (fixed - inherited from the in-monorepo `model-platform` service; not a fresh `32X0/32X1` app-profile pair. No beta port yet - beta tier stays out per TD-001 until a dedicated beta host exists) |
+| Published port | `3100` (fixed - inherited from the in-monorepo `model-platform` service; not a fresh `32X0/32X1` app-profile pair. No beta port yet - beta tier stays out per TD-001 until a dedicated beta host exists). Repo variable `APP_PUBLISH_PORT=3100` set 2026-07-26, matching `docker-compose.yml`'s existing default - this variable is only consumed by compose's port mapping (`${APP_PUBLISH_PORT:-3100}:3100`) on the host's own `.env`, not read anywhere in the GitHub workflows, so it doesn't need any CI-side wiring. |
 | Public domain | `atlas.vxture.com` (reserved, not bound - Atlas is tailnet-only today; no edge vhost is scaffolded here, unlike karda, because Atlas currently has no browser-facing surface for a vhost to protect) |
 | Tailnet | class 2 (same-apex platform tailnet fabric, per `product_230_mesh-architecture.md` D1) |
-| ACR namespace | **still TBD** - repo variable `ALIYUN_ACR_NAMESPACE` is not yet set for vxture-atlas (confirmed via `gh api orgs/vxture/actions/variables` 2026-07-26 - org-level `ALIYUN_ACR_REGISTRY` and the `ALIYUN_ACR_USERNAME`/`ALIYUN_ACR_PASSWORD` secrets are already shared to this repo, but the per-repo namespace is not). Blocks any real ACR pull until an Aliyun ACR repo/namespace exists for `atlas-app` and this repo variable is set to it - owner action, not agent-actionable. |
+| ACR namespace | **resolved 2026-07-26** - repo variable `ALIYUN_ACR_NAMESPACE=vx-foundation` set for vxture-atlas. Org-level `ALIYUN_ACR_REGISTRY` and the `ALIYUN_ACR_USERNAME`/`ALIYUN_ACR_PASSWORD` secrets were already shared to this repo (confirmed via `gh api orgs/vxture/actions/variables` 2026-07-26); this closes the last repo-side config gap for ACR-primary deploys. Still separately blocked on real `DEPLOY_*`/tailscale secrets and the `production` GitHub Environment (see below) before a deploy can actually run end to end. |
 
 ## Registry primary/fallback (deviates from governance default)
 
