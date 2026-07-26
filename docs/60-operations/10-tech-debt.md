@@ -20,7 +20,7 @@ repo-split plan itself - not discovered later.
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
-| TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | Phase A closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); Phase B (external KMS/Vault for the master key) still open |
+| TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -240,8 +240,21 @@ repo-split plan itself - not discovered later.
   `model-admin.service.ts`'s `ModelKeyReference`, resolved at request time via
   `resolveApiKey`'s `resolveManagedKey` dependency - wired into the chat,
   embed, rerank, and parse paths identically.
-- **Still open / Phase B**: the master key itself is still env-configured
-  (rotated rarely, ops event, not per-provider) - swapping its source to an
-  external KMS/Vault Transit unwrap call is a clean follow-up once the
-  platform stands up that shared infrastructure; the envelope-encryption
-  schema/abstraction does not need to change for that swap.
+- **Phase B evaluated and dropped (2026-07-26)**: the original plan was to
+  swap the master-key source to an external KMS/Vault Transit unwrap call
+  once the platform stood up that shared infrastructure. A repo-wide check
+  (`vxture-platform` + `vxture-atlas`) found **no such infrastructure exists
+  anywhere in the org today** - the documented secrets model
+  (`vxture-platform/docs/10-standards/150-security.md` section 1.3) is
+  GitHub Actions Secrets for CI/deploy-time plus chmod-600 plaintext `.env`
+  files on the host at runtime (`/srv/vxture/runtime/secrets/*.env`) - the
+  same pattern Atlas's own not-yet-exercised deploy secrets
+  (`DEPLOY_SSH_KEY`/ACR/tailscale) already use. Building a one-off Vault/KMS
+  integration just for this master key would be inconsistent, single-purpose
+  infrastructure for marginal benefit over what Phase A already delivers.
+  Decision: **closed as-is** - the master key stays env-configured (a rare,
+  ops-driven rotation event, not a per-provider one), consistent with every
+  other secret in the org. If the platform later stands up a shared
+  secrets manager for unrelated reasons, the envelope-encryption schema in
+  `service/src/provider-keys/` does not need to change to adopt it then -
+  only the master-key-loading function would swap.
