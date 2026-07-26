@@ -8,7 +8,7 @@ WORKDIR /app
 RUN corepack enable
 
 FROM base AS deps
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc ./
 COPY service/package.json ./service/package.json
 RUN --mount=type=secret,id=npm_auth_token \
     NODE_AUTH_TOKEN="$(cat /run/secrets/npm_auth_token 2>/dev/null || true)" \
