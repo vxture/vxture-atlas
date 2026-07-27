@@ -168,7 +168,14 @@ repo-split plan itself - not discovered later.
   pre-existing `[B0]` DDL stamp drift on the platform side, does not roll
   back the seed and is not Atlas's concern.) karda is clear to run its
   end-to-end `karda.ask <-> A4` check against a real `aud=atlas` token.
-  Reported back in `vxture-karda`#70.
+  Reported back in `vxture-karda`#70. **`[B0]` itself (2026-07-27)**: owned
+  and already being remediated by the platform line on their own side - not
+  tracked as an Atlas TD entry (it is platform's own DDL stamp-table
+  bookkeeping, zero overlap with Atlas's data or this repo's DDL) and no
+  duplicate `vxture-platform` issue was opened for it, since the platform
+  line confirmed the fix is already in hand. Noted here only so a future
+  reader of this entry knows the CI "failure" on those two seed runs was
+  already understood and being worked, not an open unknown.
 
 ## TD-003a - URL path asymmetry (`/model-platform/chat` vs `/v1/*`) is intentional, not debt
 
