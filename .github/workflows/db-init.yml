@@ -159,12 +159,12 @@ jobs:
 
           for f in database/ddl/00_baseline.sql database/ddl/97_service_role.sql database/ddl/98_column_locks.sql; do
             echo "[db-init] applying $f"
-            run -f "$f"
+            run < "$f"
           done
           shopt -s nullglob
           for f in database/ddl/incr/*.sql; do
             echo "[db-init] applying incr $(basename "$f")"
-            run -f "$f"
+            run < "$f"
           done
 
           # Give the service role its password so the app can authenticate. Source
