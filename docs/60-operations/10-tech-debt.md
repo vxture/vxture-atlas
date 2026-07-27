@@ -24,6 +24,7 @@ repo-split plan itself - not discovered later.
 | TD-007 | Provider-key vault (`model-platform/admin/provider-keys*`) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
 | TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | closed 2026-07-27 - `GET /.well-known/vxture-tools` implemented (`service/src/discovery/`), `S2sAuthGuard`-protected, registers all four `atlas.*` descriptors at `version: "1.0.0"` |
 | TD-009 | `ModelGrantsPage.tsx` (vxture-platform admin portal) has no `taskProfile` form field - operators can only configure task-profile routing (TD-003b) via raw API call, not through the Admin UI | 2026-07-27 | open - not this repo's write-scope; same pattern as TD-007 (backend shipped, platform UI not updated); reported alongside TD-007 in `vxture-platform`#148 (marked discussion/decision, also raises the broader architecture question of Atlas's admin surface living entirely in a different repo) |
+| TD-010 | A non-UUID `tenantId`/`applicationId` reaching `model.model_grants` (a `uuid` column) crashed as an unhandled Prisma error - opaque `500`, found live via karda's first real end-to-end probe (`vxture-atlas`#47) | 2026-07-27 | closed 2026-07-27 - `ModelRegistryRepository.findBestGrant`/`findModelCodeForTaskProfile`/`listGrantedModels` now validate UUID format before querying, throwing a clean `400 INVALID_TENANT_ID`/`INVALID_APPLICATION_ID` instead; reproduced and verified against a real local Postgres before/after the fix |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -507,3 +508,55 @@ repo-split plan itself - not discovered later.
   comparison (ops/admin vs tenant console vs product-embedded surface) for
   the platform line to weigh. Marked explicitly as a discussion/decision
   item, not just a bug report.
+
+## TD-010 - non-UUID tenantId/applicationId crashed as an unhandled 500
+
+- **What was broken**: `model.model_grants.tenant_id`/`application_id` are
+  `uuid` columns (`deploy/database/ddl/00_baseline.sql`) with no FK
+  (boundary #1 - cross-database, consistency enforced at the application
+  layer, not the DB). Nothing validated the shape of these values before
+  they reached Postgres. `ModelRegistryRepository.findBestGrant` (existing,
+  used by every chat/embed/rerank/parse call via `QuotaService.assertAllowed`)
+  and the two methods this session's TD-003b work added
+  (`findModelCodeForTaskProfile`, `listGrantedModels`) all took a raw,
+  caller-supplied `tenantId`/`applicationId` string straight into a Prisma
+  query. A non-UUID value crashed with an unhandled
+  `Inconsistent column data: Error creating UUID` Prisma error - surfaced as
+  an opaque `500 Internal server error` with no structured code, not a
+  `400`.
+- **How it was found**: karda's first real end-to-end probe against
+  production (`vxture-atlas`#47, 2026-07-27) - not caught earlier because
+  every prior test exercised this code path through a mocked
+  `ModelRegistryRepository`/`ModelRegistryService`, never a real Prisma
+  client against a real Postgres. karda's actual tenant identifier is a
+  composite org/workspace string, not a bare UUID - passing that straight
+  through as `tenantId` is exactly what crashed.
+- **Root cause, precisely**: `GET /model-platform/models?tenantId=` and the
+  `taskProfile` resolution path both trust a caller-supplied string as-is;
+  `findBestGrant` (pre-existing) has the same exposure for `ChatRequest.tenantId`
+  once a real `modelCode` is given (not hit by karda's probe only because
+  they tested with a dummy `modelCode`, which 404s before reaching the grant
+  lookup).
+- **Fix (2026-07-27)**: added `assertUuid()` in
+  `model-registry.repository.ts`, called at the top of `findBestGrant`,
+  `findModelCodeForTaskProfile`, and `listGrantedModels` - a malformed
+  `tenantId`/`applicationId` now throws `ModelRuntimeException(400,
+  "INVALID_TENANT_ID"` or `"INVALID_APPLICATION_ID")` before any Prisma call,
+  with a message telling the caller to use the platform tenant/workspace
+  UUID from their token context, not an internal composite identifier.
+  Reproduced the original crash against a real local Postgres (DDL applied,
+  seeded data) before the fix and confirmed the clean `400` after - not just
+  unit-tested against a mock. 5 new tests added
+  (`model-registry.repository.spec.ts`), full suite green (261/261),
+  `tsc --noEmit` clean.
+- **Not fixed here (deliberately out of scope)**: whether `tenantId` should
+  be *derived from the verified S2S token's `workspaceId` claim* instead of
+  trusted as a client-supplied query param/body field at all - that would
+  also close a tenant-enumeration risk (any valid S2S token could currently
+  query grants for an arbitrary `tenantId`, not just its own), mirroring the
+  platform's own known gap (`vxture-platform` TD-035 - S2S token identity not
+  bound to workspace/product params on platform routers). Recording this as
+  a follow-up, not blocking the hotfix - the immediate crash is what karda
+  was blocked on.
+- **Report to karda line**: replied directly in `vxture-atlas`#47 with the
+  root cause and the fix, once deployed.

@@ -32,7 +32,12 @@ export type ModelRuntimeErrorCode =
   | "MODEL_NOT_IMPLEMENTED"
   // Task-profile routing (docs/70-workplan) - no active grant matches the
   // requested taskProfile for this tenant/application.
-  | "TASK_PROFILE_NOT_ROUTABLE";
+  | "TASK_PROFILE_NOT_ROUTABLE"
+  // tenantId/applicationId reaching a `uuid`-typed grant column must actually
+  // be a UUID - a malformed value used to crash as an unhandled 500
+  // (Postgres/Prisma UUID-cast error) instead of a clean 400.
+  | "INVALID_TENANT_ID"
+  | "INVALID_APPLICATION_ID";
 
 export interface ModelRuntimeErrorResponse {
   code: ModelRuntimeErrorCode;
