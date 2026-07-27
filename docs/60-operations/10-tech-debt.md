@@ -157,6 +157,18 @@ repo-split plan itself - not discovered later.
   karda reply letter (`docs/80-liaison/10-2607241030-...`). This is a
   point-in-time fact tied to the current host assignment, not a permanent
   guarantee - it needs re-confirming if either side's host ever changes.
+- **Progress (2026-07-27) - `aud=atlas` production registration confirmed**:
+  the one residual item flagged in the karda reply (whether Atlas's
+  `product.products` row + OIDC client `product_id` backfill had actually run
+  in production, not just merged in code) is now confirmed done - platform
+  line verified in `vxture-platform`#145 that two `db-init` seed runs
+  (2026-07-26T19:12Z, 2026-07-27T03:41Z) both completed the atlas OIDC
+  client + `product_id` backfill + plan-skeleton steps successfully. (Those
+  runs show CI "failure" on an unrelated later read-only check - a
+  pre-existing `[B0]` DDL stamp drift on the platform side, does not roll
+  back the seed and is not Atlas's concern.) karda is clear to run its
+  end-to-end `karda.ask <-> A4` check against a real `aud=atlas` token.
+  Reported back in `vxture-karda`#70.
 
 ## TD-003a - URL path asymmetry (`/model-platform/chat` vs `/v1/*`) is intentional, not debt
 
