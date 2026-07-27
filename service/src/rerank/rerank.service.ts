@@ -58,8 +58,8 @@ export class RerankService {
   }
 
   private validate(request: RerankRequest): void {
-    if (typeof request.modelCode !== "string" || !request.modelCode.trim()) {
-      throw new BadRequestException("modelCode is required");
+    if (!request.modelCode?.trim() && !request.taskProfile?.trim()) {
+      throw new BadRequestException("modelCode or taskProfile is required");
     }
 
     if (typeof request.workspaceId !== "string" || !request.workspaceId.trim()) {
@@ -80,7 +80,7 @@ export class RerankService {
         HttpStatus.BAD_REQUEST,
         "CANDIDATE_POOL_TOO_LARGE",
         `candidates cannot exceed ${RERANK_CANDIDATE_POOL_LIMIT} (got ${request.candidates.length})`,
-        { modelCode: request.modelCode },
+        request.modelCode ? { modelCode: request.modelCode } : {},
       );
     }
 

@@ -7,7 +7,10 @@ export interface RerankCandidate {
 }
 
 export interface RerankRequest {
-  modelCode: string;
+  /** Required unless `taskProfile` is given - one of the two must resolve to a model. */
+  modelCode?: string;
+  /** Task-profile routing (docs/70-workplan) - see `ChatRequest.taskProfile`. */
+  taskProfile?: string;
   query: string;
   candidates: RerankCandidate[];
   workspaceId: string;

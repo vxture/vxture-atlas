@@ -261,6 +261,108 @@ export class ModelRegistryRepository {
     );
   }
 
+  /**
+   * Task-profile routing (docs/70-workplan): pick the modelCode for the
+   * highest-priority active, non-expired grant matching `taskProfile` for
+   * this tenant - preferring an exact application-scope match over the
+   * tenant-wide wildcard (application_id/type both null), same precedence
+   * `findBestGrant` uses for entitlement.
+   */
+  async findModelCodeForTaskProfile(
+    taskProfile: string,
+    tenantId: string,
+    applicationId: string,
+    applicationType: ApplicationType,
+  ): Promise<string | null> {
+    const grants = await prisma.modelGrant.findMany({
+      where: {
+        tenantId,
+        taskProfile,
+        deletedAt: null,
+        isActive: true,
+        modelDef: { isActive: true, deletedAt: null },
+        OR: [
+          { applicationId, applicationType },
+          { applicationId: null, applicationType: null },
+        ],
+        AND: [
+          {
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        ],
+      },
+      orderBy: [
+        { applicationId: "desc" },
+        { priority: "asc" },
+        { createdAt: "desc" },
+      ],
+      take: 2,
+    });
+
+    const picked =
+      grants.find(
+        (grant) =>
+          grant.applicationId === applicationId &&
+          grant.applicationType === applicationType,
+      ) ??
+      grants.find(
+        (grant) =>
+          grant.applicationId === null && grant.applicationType === null,
+      ) ??
+      null;
+
+    if (!picked) {
+      return null;
+    }
+
+    const model = await this.findModelById(picked.modelId);
+    return model?.modelCode ?? null;
+  }
+
+  /**
+   * Tenant-filtered "available models" list (docs/70-workplan): distinct
+   * active models the tenant/application has an active, non-expired grant
+   * for - not the global unfiltered catalog.
+   */
+  async listGrantedModels(filters: {
+    tenantId: string;
+    applicationId?: string;
+    applicationType?: ApplicationType;
+  }): Promise<AiModelRecord[]> {
+    const grants = await prisma.modelGrant.findMany({
+      where: {
+        tenantId: filters.tenantId,
+        deletedAt: null,
+        isActive: true,
+        modelDef: { isActive: true, deletedAt: null },
+        OR: [
+          filters.applicationId
+            ? {
+                applicationId: filters.applicationId,
+                ...(filters.applicationType
+                  ? { applicationType: filters.applicationType }
+                  : {}),
+              }
+            : {},
+          { applicationId: null, applicationType: null },
+        ],
+        AND: [
+          {
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        ],
+      },
+      orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+    });
+
+    const modelIds = [...new Set(grants.map((grant) => grant.modelId))];
+    const models = await Promise.all(
+      modelIds.map((modelId) => this.findModelById(modelId)),
+    );
+
+    return models.filter((model): model is AiModelRecord => model !== null);
+  }
+
   listGrants(filters: {
     tenantId?: string;
     modelId?: string;
@@ -301,6 +403,7 @@ export class ModelRegistryRepository {
         applicationType:
           input.applicationType ?? (input.agentId ? "agent" : null),
         agentId: input.agentId ?? null,
+        taskProfile: input.taskProfile ?? null,
         priority: input.priority ?? 100,
         reason: input.reason ?? null,
         expiresAt: input.expiresAt ?? null,

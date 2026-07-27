@@ -50,6 +50,7 @@ export class ModelRuntimeService {
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
     this.validateChatRequest(request);
+    const modelCode = await this.resolveModelCode(request);
 
     const requestId = request.requestId?.trim() || randomUUID();
     const applicationScope = resolveApplicationScope(request);
@@ -58,7 +59,7 @@ export class ModelRuntimeService {
       request,
       requestId,
       applicationScope,
-      modelCode: request.modelCode,
+      modelCode,
       status: "started",
       fallbackAttempt: 0,
     });
@@ -66,19 +67,19 @@ export class ModelRuntimeService {
     try {
       let models: AiModelRecord[];
       try {
-        models = await this.resolveCandidateModels(request.modelCode);
+        models = await this.resolveCandidateModels(modelCode);
       } catch (error) {
         this.logRuntimeEvent("model_runtime_request_failed", {
           request,
           requestId,
           applicationScope,
-          modelCode: request.modelCode,
+          modelCode,
           status: "provider_error",
           errorCode: readRuntimeErrorCode(error),
           fallbackAttempt: 0,
         });
         throw this.enrichRuntimeError(error, requestId, {
-          modelCode: request.modelCode,
+          modelCode,
         });
       }
       let lastProviderError: ModelRuntimeException | undefined;
@@ -201,7 +202,7 @@ export class ModelRuntimeService {
         request,
         requestId,
         applicationScope,
-        modelCode: request.modelCode,
+        modelCode,
         status: "provider_error",
         errorCode: lastProviderError?.code ?? "PROVIDER_UNAVAILABLE",
         fallbackAttempt: models.length,
@@ -213,7 +214,7 @@ export class ModelRuntimeService {
           HttpStatus.SERVICE_UNAVAILABLE,
           "PROVIDER_UNAVAILABLE",
           "No provider candidate completed the request",
-          { requestId, modelCode: request.modelCode },
+          { requestId, modelCode },
         )
       );
     } finally {
@@ -229,6 +230,7 @@ export class ModelRuntimeService {
    */
   async *chatStream(request: ChatRequest): AsyncGenerator<StreamEvent> {
     this.validateChatRequest(request);
+    const modelCode = await this.resolveModelCode(request);
 
     const requestId = request.requestId?.trim() || randomUUID();
     const applicationScope = resolveApplicationScope(request);
@@ -237,7 +239,7 @@ export class ModelRuntimeService {
       request,
       requestId,
       applicationScope,
-      modelCode: request.modelCode,
+      modelCode,
       status: "started",
       fallbackAttempt: 0,
     });
@@ -245,19 +247,19 @@ export class ModelRuntimeService {
     try {
       let candidateModels: AiModelRecord[];
       try {
-        candidateModels = await this.resolveCandidateModels(request.modelCode);
+        candidateModels = await this.resolveCandidateModels(modelCode);
       } catch (error) {
         this.logRuntimeEvent("model_runtime_stream_failed", {
           request,
           requestId,
           applicationScope,
-          modelCode: request.modelCode,
+          modelCode,
           status: "provider_error",
           errorCode: readRuntimeErrorCode(error),
           fallbackAttempt: 0,
         });
         throw this.enrichRuntimeError(error, requestId, {
-          modelCode: request.modelCode,
+          modelCode,
         });
       }
 
@@ -268,7 +270,7 @@ export class ModelRuntimeService {
           request,
           requestId,
           applicationScope,
-          modelCode: request.modelCode,
+          modelCode,
           status: "provider_error",
           errorCode: "MODEL_NOT_ROUTABLE",
           fallbackAttempt: 0,
@@ -276,8 +278,8 @@ export class ModelRuntimeService {
         throw new ModelRuntimeException(
           HttpStatus.SERVICE_UNAVAILABLE,
           "MODEL_NOT_ROUTABLE",
-          `AI model "${request.modelCode}" does not support streaming and has no streaming fallback`,
-          { requestId, modelCode: request.modelCode },
+          `AI model "${modelCode}" does not support streaming and has no streaming fallback`,
+          { requestId, modelCode },
         );
       }
 
@@ -390,7 +392,7 @@ export class ModelRuntimeService {
         request,
         requestId,
         applicationScope,
-        modelCode: request.modelCode,
+        modelCode,
         status: "provider_error",
         errorCode: lastProviderError?.code ?? "PROVIDER_UNAVAILABLE",
         fallbackAttempt: models.length,
@@ -402,7 +404,7 @@ export class ModelRuntimeService {
           HttpStatus.SERVICE_UNAVAILABLE,
           "PROVIDER_UNAVAILABLE",
           "No streaming provider candidate completed the request",
-          { requestId, modelCode: request.modelCode },
+          { requestId, modelCode },
         )
       );
     } finally {
@@ -489,8 +491,8 @@ export class ModelRuntimeService {
       throw new BadRequestException("tenantId is required");
     }
 
-    if (typeof request.modelCode !== "string" || !request.modelCode.trim()) {
-      throw new BadRequestException("modelCode is required");
+    if (!request.modelCode?.trim() && !request.taskProfile?.trim()) {
+      throw new BadRequestException("modelCode or taskProfile is required");
     }
 
     const validApplicationTypes = new Set([
@@ -540,6 +542,26 @@ export class ModelRuntimeService {
     if (invalidMessage) {
       throw new BadRequestException("messages contain invalid role or content");
     }
+  }
+
+  /**
+   * `validateChatRequest` already guarantees at least one of `modelCode`/
+   * `taskProfile` is present. Task-profile resolution (docs/70-workplan)
+   * requires a real tenant/grant lookup, so this is async and DB-backed.
+   */
+  private async resolveModelCode(request: ChatRequest): Promise<string> {
+    const modelCode = request.modelCode?.trim();
+    if (modelCode) {
+      return modelCode;
+    }
+
+    const applicationScope = resolveApplicationScope(request);
+    return this.registry.resolveModelCodeForTaskProfile({
+      tenantId: request.tenantId,
+      taskProfile: request.taskProfile!.trim(),
+      applicationId: applicationScope.applicationId,
+      applicationType: applicationScope.applicationType,
+    });
   }
 
   private async resolveCandidateModels(

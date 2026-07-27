@@ -29,7 +29,10 @@ export type ModelRuntimeErrorCode =
   | "RATE_LIMITED"
   | "CANDIDATE_POOL_TOO_LARGE"
   | "RERANK_UNAVAILABLE"
-  | "MODEL_NOT_IMPLEMENTED";
+  | "MODEL_NOT_IMPLEMENTED"
+  // Task-profile routing (docs/70-workplan) - no active grant matches the
+  // requested taskProfile for this tenant/application.
+  | "TASK_PROFILE_NOT_ROUTABLE";
 
 export interface ModelRuntimeErrorResponse {
   code: ModelRuntimeErrorCode;

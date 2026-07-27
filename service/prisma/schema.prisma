@@ -94,6 +94,13 @@ model ModelGrant {
   applicationId   String?   @map("application_id") @db.Uuid
   applicationType String?   @map("application_type") @db.VarChar(32)
   agentId         String?   @map("agent_id") @db.Uuid
+  // Task-profile routing (docs/70-workplan): a grant with taskProfile set is a
+  // tenant's preferred model for that task profile (e.g. "summarization",
+  // "long-context") - callers may pass taskProfile instead of an explicit
+  // modelCode and let ModelRegistryService.resolveModelCodeForTaskProfile pick
+  // the highest-priority active, non-expired match. NULL = ordinary
+  // entitlement-only grant, unrelated to task-profile routing.
+  taskProfile     String?   @map("task_profile") @db.VarChar(64)
   priority        Int       @default(100)
   isActive        Boolean   @default(true) @map("is_active")
   reason          String?   @db.VarChar(512)
@@ -112,6 +119,7 @@ model ModelGrant {
   @@index([applicationType], map: "idx_model_grants_application_type")
   @@index([agentId], map: "idx_model_grants_agent")
   @@index([isActive], map: "idx_model_grants_is_active")
+  @@index([taskProfile], map: "idx_model_grants_task_profile")
   @@map("model_grants")
   @@schema("model")
 }

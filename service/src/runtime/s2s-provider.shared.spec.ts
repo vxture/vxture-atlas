@@ -1,7 +1,7 @@
-import { HttpStatus } from "@nestjs/common";
-import { describe, it, expect } from "vitest";
+import { BadRequestException, HttpStatus } from "@nestjs/common";
+import { describe, it, expect, vi } from "vitest";
 
-import { toS2sProviderError } from "./s2s-provider.shared";
+import { resolveGatedModel, toS2sProviderError } from "./s2s-provider.shared";
 import { ProviderCapabilityNotImplementedError } from "../providers/base.provider";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { AiModelRecord } from "../types/runtime.types";
@@ -57,5 +57,64 @@ describe("toS2sProviderError", () => {
     const error = toS2sProviderError(new Error("boom"), makeModel(), "req-1");
     expect(error.code).toBe("PROVIDER_UNAVAILABLE");
     expect(error.getStatus()).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+  });
+});
+
+function makeDeps(model: AiModelRecord) {
+  const registry = {
+    getActiveModel: vi.fn().mockResolvedValue(model),
+    resolveModelCodeForTaskProfile: vi.fn().mockResolvedValue(model.modelCode),
+  };
+  const quota = { assertAllowed: vi.fn().mockResolvedValue(undefined) };
+  const provider = {};
+  const router = { resolve: vi.fn().mockReturnValue(provider) };
+  const providerKeys = { resolveKey: vi.fn().mockResolvedValue(null) };
+
+  return { registry, quota, router, provider, providerKeys };
+}
+
+describe("resolveGatedModel - task-profile routing", () => {
+  it("uses modelCode directly when given, without consulting taskProfile resolution", async () => {
+    const model = makeModel({ modelCode: "explicit-model" });
+    const deps = makeDeps(model);
+
+    const gated = await resolveGatedModel(deps as never, {
+      modelCode: "explicit-model",
+      tenantId: "tenant-1",
+    });
+
+    expect(gated.model).toBe(model);
+    expect(deps.registry.resolveModelCodeForTaskProfile).not.toHaveBeenCalled();
+    expect(deps.registry.getActiveModel).toHaveBeenCalledWith("explicit-model");
+  });
+
+  it("resolves modelCode from taskProfile when modelCode is omitted", async () => {
+    const model = makeModel({ modelCode: "resolved-model" });
+    const deps = makeDeps(model);
+
+    const gated = await resolveGatedModel(deps as never, {
+      taskProfile: "summarization",
+      tenantId: "tenant-1",
+      applicationId: "app-1",
+      applicationType: "agent",
+    });
+
+    expect(deps.registry.resolveModelCodeForTaskProfile).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      taskProfile: "summarization",
+      applicationId: "app-1",
+      applicationType: "agent",
+    });
+    expect(gated.model).toBe(model);
+  });
+
+  it("rejects when neither modelCode nor taskProfile is given", async () => {
+    const model = makeModel();
+    const deps = makeDeps(model);
+
+    await expect(
+      resolveGatedModel(deps as never, { tenantId: "tenant-1" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(deps.registry.getActiveModel).not.toHaveBeenCalled();
   });
 });

@@ -96,6 +96,7 @@ export interface AiModelGrantAdminRecord {
   applicationId: string | null;
   applicationType: ApplicationType | null;
   agentId: string | null;
+  taskProfile: string | null;
   priority: number;
   reason: string | null;
   expiresAt: string | null;
@@ -202,6 +203,7 @@ export type CreateAiModelGrantBody = {
   applicationId?: string | null;
   applicationType?: ApplicationType | null;
   agentId?: string | null;
+  taskProfile?: string | null;
   priority?: number | null;
   reason?: string | null;
   expiresAt?: string | null;
@@ -212,6 +214,7 @@ export type UpdateAiModelGrantBody = {
   applicationId?: string | null;
   applicationType?: ApplicationType | null;
   agentId?: string | null;
+  taskProfile?: string | null;
   priority?: number | null;
   reason?: string | null;
   expiresAt?: string | null;
@@ -631,6 +634,7 @@ export class ModelAdminService {
       applicationId,
       applicationType,
       agentId,
+      taskProfile: optionalString(body.taskProfile),
       priority: parsePriority(body.priority),
       reason: optionalString(body.reason),
       expiresAt: parseDateOrNull(body.expiresAt),
@@ -662,6 +666,8 @@ export class ModelAdminService {
         body.applicationType === null
           ? null
           : normalizeApplicationType(body.applicationType, "applicationType");
+    if (body.taskProfile !== undefined)
+      input.taskProfile = optionalString(body.taskProfile);
     if (body.priority !== undefined)
       input.priority = parsePriority(body.priority);
     if (body.reason !== undefined) input.reason = optionalString(body.reason);
@@ -945,6 +951,7 @@ function mapGrant(grant: AiModelGrantRecord): AiModelGrantAdminRecord {
     applicationId: grant.applicationId,
     applicationType: grant.applicationType,
     agentId: grant.agentId,
+    taskProfile: grant.taskProfile,
     priority: grant.priority,
     reason: grant.reason,
     expiresAt: grant.expiresAt?.toISOString() ?? null,

@@ -58,7 +58,7 @@
 | 请求 | `{ modelCode, task: "layout"|"ocr"|"table"|"formula", pages: [{ pageIndex, imageRef|imageBase64, regions?: [...] }], workspaceId, tenantId?, applicationId?, applicationType? }` |
 | 响应 | 按 `task` 分形态返回：`layout`→ `blocks: [{bbox, blockType}]`；`ocr`→ `spans: [{bbox, text}]`；`table`→ `{rows, cols, cells: [{rowSpan, colSpan, text, bbox}]}`；`formula`→ `{latex, bbox}`（karda A2.4 期望的"元素树可直接消费"形态，具体字段随首个真实联调迭代） |
 | 批量（A2.2 硬约束） | 单请求 `pages` 数组带多页/多区域，避免逐页往返 |
-| **部署亲和（A2.3）** | **未决**——这是 karda `70` 号函的核心诉求，也是本文档唯一"需要 Atlas 资源/infra 决策而非纯设计"的一项。可行性取决于 Atlas 实际部署主机与 karda worker 是否同 tailnet 域/同机房，需在 Phase 6 host 分配拍板后才能给出结论。**在此之前不对 karda 承诺同域部署**，避免过早承诺又跳票——按 karda 要求"能力有无都要一个结论"，Phase 6 host 定了之后必须回一次 |
+| **部署亲和（A2.3）** | **已定，可行——已确认同机部署**：平台仓 `docs/50-deployment/13-infra-allocation-registry.md` 的 atlas 行与 karda(L2) 行均登记为 `worker-02`（`100.76.219.48`，tailnet 类 2），二者是同一台物理主机、同一 tailnet 域——karda 调用 Atlas 的 `/v1/parse` 走本机回环/同域 tailnet，不经过跨机房公网路径。结论：部署亲和条件满足，karda 可以按"同机低延迟"假设设计 A2 调用路径，不需要再等待或设计跨机房降级方案。（若未来 Atlas 或 karda 任一方迁移主机，这条结论需要重新确认——本条不是永久保证，是"以 2026-07-27 的主机分配现状为准") |
 | 计量 | 同 A1，workspaceId=库归属方 |
 
 ## 4. A3 — Rerank
@@ -73,13 +73,47 @@
 | 降级信号（A3.4 硬约束） | rerank 服务不可用时快速失败：`503 RERANK_UNAVAILABLE`（不是超时挂起），调用方按此回退到自己的 RRF 序并标 `degraded` |
 | 计量 | workspaceId=触发请求的 workspace（检索场景由用户触发，不是资产归属方） |
 
-## 5. 待回karda的两件事（回函草稿见 `docs/80-liaison/`）
+## 5. 待回karda的事项（回函草稿见 `docs/80-liaison/`）
 
 1. **G1（429 区分）**：本文档已给出确定设计，可以现在就回复 karda——不必等 Atlas 实现落地。
-2. **A3.3（rerank 延迟）**：诚实告知"暂无法给数字，需实现+压测后才能承诺，会在 Atlas 有真实部署后第一时间测给",不假装现在已经知道。
+2. **A2.3（部署亲和）**：已定，可行（同机 worker-02，见上表）——本次一并回函告知结论。
+3. **A3.3（rerank 延迟）**：诚实告知"暂无法给数字，需实现+压测后才能承诺，会在 Atlas 有真实部署后第一时间测给",不假装现在已经知道。
 
 ## 6. 未决清单（不在本文档拍板,留给对应 Phase）
 
-- A2.3 部署亲和：待 Phase 6 host 分配。
 - A1 单批 chunk 数上限、A3 rerank 真实延迟：待 Phase 4/5 有真实模型+部署后压测。
 - 各端点 `modelCode` 具体注册哪些型号（如 embedding 用什么模型、rerank 用什么 cross-encoder）：产品/成本决策，不在本设计文档范围。
+
+## 7. 租户可选模型清单 + 任务画像路由（2026-07-27 落地）
+
+karda 提出的两项消费面前置依赖（用户模型选择器需要一个"当前租户能用哪些模型"的接口；
+`karda.ask` 等功能需要"业务自动适配"而不是每次都显式传 `modelCode`）已经实现，均是**加法式**
+契约变更（不破坏任何现有调用方）：
+
+### 7.1 租户过滤的可选模型清单
+
+`GET /model-platform/models`（既有 `ModelRuntimeController` 路由，未新增前缀）新增
+可选 query 参数 `tenantId`/`applicationId`/`applicationType`：
+
+- 不带 `tenantId`：行为不变——返回全量启用模型（既有 ops/admin 用途）。
+- 带 `tenantId`：改为返回该租户（+ 可选 application 范围）**实际持有有效 grant** 的模型集
+  （`model.model_grants`，过滤 `isActive`/未过期/`model_grants.applicationId+Type` 精确匹配
+  或租户级通配 grant），不是全局目录——这是 karda 做"用户主动选择模型"UI 的直接依赖。
+
+### 7.2 任务画像路由（taskProfile）
+
+`ChatRequest`/`EmbedRequest`/`RerankRequest`/`ParseRequest` 新增可选字段 `taskProfile: string`，
+`modelCode` 相应改为可选——**二者至少给一个**，两者都不给会 400。调用方（如 `karda.ask`）可以只传
+`taskProfile`（如 `"summarization"`），不需要预先知道具体 `modelCode`：
+
+- `model.model_grants` 新增可空列 `task_profile`——运营在某个 grant 上打上 `taskProfile` 标签，
+  即声明"这是该租户/应用在这个任务画像下的首选模型"；同一 taskProfile 可以有多条 grant，按
+  `priority`（数值越小越优先）取最高优先级的有效（active、未过期）匹配。
+- 精确 application 范围匹配优先于租户级通配 grant，和既有 `QuotaService.assertAllowed` 的
+  entitlement 查找同一优先级规则,不是另一套语义。
+- 解析找不到匹配时返回 `404 TASK_PROFILE_NOT_ROUTABLE`，不是静默兜底到某个默认模型。
+- 管理面（`model-platform/admin/grants*`）的创建/更新 body 新增 `taskProfile` 字段，运营可以
+  直接通过既有 grant CRUD 配置任务画像路由，不需要新的管理端点。
+
+这两项都是纯加法（新 query 参数、新可选字段、新可空列），不改变任何现有调用方的行为——
+per product_210 §11 自查：认证路径/错误封套/计量归属都复用既有 A1-A4 路径，未新增。

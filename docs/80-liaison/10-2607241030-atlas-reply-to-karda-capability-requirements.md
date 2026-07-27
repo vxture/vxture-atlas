@@ -1,12 +1,18 @@
 # atlas → karda：对 `100-2607240931` 能力需求的两项即时回复
 
-> **状态：内容仍然有效，发送状态需要更正**——本函原先标注"待仓库有实际 GitHub 地址后发送"，
-> 但 Phase 1（仓库骨架、CI、真实 GitHub 远程）已经在 2026-07-24 完成并持续有真实 PR 合并
-> （github.com/vxture/vxture-atlas），发送前提早已满足，只是这条状态说明当时没有跟着更新。
-> G1/A3.3 的回复内容本身未过时——G1 契约形状已实现且未变；A3.3 仍然是真实压测阻塞项（见
+> **状态：内容仍然有效，发送状态需要更正，新增 A2.3 结论 + 鉴权现状澄清（2026-07-27）**——本函
+> 原先标注"待仓库有实际 GitHub 地址后发送"，但 Phase 1（仓库骨架、CI、真实 GitHub 远程）已经在
+> 2026-07-24 完成并持续有真实 PR 合并（github.com/vxture/vxture-atlas），发送前提早已满足，只是
+> 这条状态说明当时没有跟着更新。G1 的回复内容本身未过时——契约形状已实现且未变。**A2.3（部署
+> 亲和）本次新增确定结论**（见第 3 节，之前是"未决"）。A3.3 仍然是真实压测阻塞项（见
 > `docs/60-operations/10-tech-debt.md` TD-003），承诺"实现+部署后主动回信"仍然有效、仍未兑现。
-> 是否要通过正式渠道（如 vxture-karda 仓库开 issue）实际发出，需要人工确认后执行——这是一次
-> 跨仓库、对外可见的动作，本次仅更正文档状态，不代表已经发送。
+> 另外，本函第 3 节原文对"S2S 鉴权是否已具备"的表述已经过期——第 3 节末尾新增一段更正说明，
+> 请以那段为准，不要按原文字面理解为"鉴权链路已完全打通"。**新增第 5 节**：租户过滤的可选模型
+> 清单接口 + taskProfile 任务画像路由已经落地，对应你侧模型选择器和 `karda.ask` 自动适配的
+> 前置依赖。
+> **已发送（2026-07-27）**：经人工确认，已在 `vxture-karda` 仓库开 issue 正式发出——
+> https://github.com/vxture/vxture-karda/issues/70 （对外行文按本函内容重新整理，非整篇内部
+> 文档搬运）。本文件保留为 Atlas 侧的完整内部记录。
 > **发件**：vxture-atlas（产品线）
 > **收件**：vxture-karda
 > **主题**：对 `docs/80-liaison/100-2607240931-karda-atlas-capability-requirements.md` 中
@@ -50,12 +56,46 @@
 
 - A1 的批量接口 + 模型版本可枚举可固定 + 维度稳定：设计已采纳，`modelCode` 本身即版本化标识，
   换版本=注册新 code，不做"latest"静默漂移。
-- A2.3（解析类部署亲和）：**这项目前也无法给你结论**——可行性取决于 Atlas 实际部署主机分配（还
-  未定，见拆仓计划 Phase 6），主机定了之后我们会专门回一次，不会让你们干等到功能上线才知道结果。
+- **A2.3（解析类部署亲和）：结论已定，可行——同机部署。** 平台仓
+  `docs/50-deployment/13-infra-allocation-registry.md` 登记 Atlas 与 karda(L2) 均在
+  `worker-02`（`100.76.219.48`，tailnet 类 2）——你侧调用 Atlas `/v1/parse` 是同机、同 tailnet
+  域，不经过跨机房公网路径。你可以按"同机低延迟"设计 A2 调用路径。（这条结论基于当前主机分配
+  现状，若日后任一方迁移主机需要重新确认，不是永久保证）
 - 其余（A2.4 响应形态、A1.6 幂等、G2/G3/G4 计量与凭证语义）均已按你的诉求采纳，细节见设计稿，
   不在此逐条复述。
 
-## 4. 优先级确认
+## 4. 鉴权现状更正（2026-07-27 补充，请以此段为准）
+
+本函第 3 节及 `docs/30-design/200-s2s-provider-surface.md` 的 G4 提到的 S2S token 凭证机制，
+截至今天的准确状态是：
+
+- Atlas 侧（被调方）已经实现验签——`/v1/embed`、`/v1/rerank`、`/v1/parse`、
+  `POST /model-platform/chat` 全部挂了 `S2sAuthGuard`（RS256 + JWKS，按 `product_210` 规范）。
+- 平台侧的通用 S2S token-exchange 机制（`product_210` T1：`/oidc/token` 的
+  `urn:ietf:params:oauth:grant-type:token-exchange` grant_type；T2：平台面端点双接受）
+  **已经实施，自 2026-07-12 起生效**——不是"尚未实现"，这一点如果你的设计前提里还在假设
+  "token-exchange 本身还不存在"，需要更正。
+- 但你侧要拿到一枚 `aud=atlas` 的 token（karda 调 Atlas，而不是调平台面端点），还依赖 Atlas
+  作为产品在平台侧的注册（`product.products` 行 + OIDC client 的 `product_id` 反填）——这项
+  代码已合并，但**生产环境执行（db-init）状态需要你直接跟平台线确认**，不由 Atlas 单方面保证。
+  也就是说：机制本身已就绪，Atlas 这端的验签也已就绪，唯一悬而未决的是"Atlas 产品注册是否已在
+  生产库跑过"，这是平台线的执行项，不是"token-exchange 未实现"这么笼统的说法。
+- 建议：你侧如果现在就要联调，先向平台线确认 Atlas 的 `product.products` 注册是否已在生产执行；
+  确认后即可按 `aud=atlas`、`act.sub`=你的服务身份走 service 模式换取 token，直接打 Atlas 的
+  `/v1/*` 端点。
+
+## 5. 两项新增能力（2026-07-27，对应你侧模型选择器 + 自动适配需求）
+
+- **租户过滤的可选模型清单**：`GET /model-platform/models?tenantId=<你的租户>` 现在返回该租户
+  实际持有 grant 的模型集，不再是全局未过滤目录——这是你做"用户主动选择模型"UI 的前置依赖，
+  现在可以开始接了。细节见设计稿 `docs/30-design/200-s2s-provider-surface.md` §7.1。
+- **任务画像路由（taskProfile）**：`chat`/`embed`/`rerank`/`parse` 四个端点现在都接受可选的
+  `taskProfile` 字段代替显式 `modelCode`（二者至少给一个）。`karda.ask` 这类"自动适配"场景可以
+  只传任务画像字符串，由 Atlas 侧按租户的 grant 配置解析到具体模型，不需要你侧硬编码
+  `modelCode`。找不到匹配返回 `404 TASK_PROFILE_NOT_ROUTABLE`，不会静默兜底。细节见设计稿 §7.2。
+- 两者都是纯加法契约变更，不影响你已有的任何调用方式——继续显式传 `modelCode` 完全不受影响。
+
+## 6. 优先级确认
 
 收到你"A1 > A3 > A2"的优先级声明。我们目前判断资源投入顺序会与此一致（A1 embedding 相对独立、
 不依赖主机分配问题，可以先行；A2 卡在部署亲和的主机决策上，A3 卡在延迟实测），但正式排期要等

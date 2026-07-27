@@ -5,6 +5,7 @@ import {
   HttpException,
   Inject,
   Post,
+  Query,
   Res,
   UseGuards,
 } from "@nestjs/common";
@@ -14,6 +15,7 @@ import { ModelRegistryService } from "../registry/model-registry.service";
 import { S2sAuthGuard } from "./guards/s2s-auth.guard";
 import type {
   AiModelRecord,
+  ApplicationType,
   ChatRequest,
   ChatResponse,
   StreamEvent,
@@ -59,9 +61,27 @@ export class ModelRuntimeController {
     res.json(response satisfies ChatResponse);
   }
 
+  /**
+   * Unfiltered when called without `tenantId` (existing behavior, unchanged -
+   * ops/admin tooling). With `tenantId`, returns only the models that tenant/
+   * application actually has an active grant for (docs/70-workplan tenant-
+   * filtered "available models" list) instead of the full global catalog.
+   */
   @Get("models")
-  async listModels(): Promise<ModelSummary[]> {
-    const models = await this.registry.listActiveModels();
+  async listModels(
+    @Query("tenantId") tenantId?: string,
+    @Query("applicationId") applicationId?: string,
+    @Query("applicationType") applicationType?: ApplicationType,
+  ): Promise<ModelSummary[]> {
+    const models = tenantId?.trim()
+      ? await this.registry.listModelsForTenant({
+          tenantId: tenantId.trim(),
+          ...(applicationId?.trim()
+            ? { applicationId: applicationId.trim() }
+            : {}),
+          ...(applicationType ? { applicationType } : {}),
+        })
+      : await this.registry.listActiveModels();
     return models.map(toModelSummary);
   }
 

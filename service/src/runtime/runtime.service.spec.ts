@@ -104,6 +104,22 @@ describe("validateChatRequest", () => {
     );
   });
 
+  it("throws when both modelCode and taskProfile are missing", () => {
+    expect(() =>
+      validate({ ...makeRequest(), modelCode: undefined }),
+    ).toThrow(BadRequestException);
+  });
+
+  it("accepts a taskProfile in place of modelCode", () => {
+    expect(() =>
+      validate({
+        ...makeRequest(),
+        modelCode: undefined,
+        taskProfile: "summarization",
+      }),
+    ).not.toThrow();
+  });
+
   it("throws when applicationId is empty", () => {
     expect(() =>
       validate({
@@ -550,6 +566,30 @@ describe("ModelRuntimeService runtime flow", () => {
     expect(serializedLogs).toContain('"request_id":"request-secret-log-1"');
     expect(serializedLogs).not.toContain("MODEL_PLATFORM_SECRET_KEY");
     expect(serializedLogs).not.toContain("secret-provider-key-value");
+  });
+
+  it("resolves modelCode from taskProfile when modelCode is omitted", async () => {
+    const resolveModelCodeForTaskProfile = vi
+      .fn()
+      .mockResolvedValue("primary-model");
+    const { service } = makeRuntime({
+      registry: { resolveModelCodeForTaskProfile },
+    });
+
+    const { modelCode: _omit, ...requestWithoutModelCode } = makeRequest({
+      taskProfile: "summarization",
+      applicationId: "app-1",
+      applicationType: "agent",
+    });
+    const response = await service.chat(requestWithoutModelCode);
+
+    expect(response.modelCode).toBe("primary-model");
+    expect(resolveModelCodeForTaskProfile).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      taskProfile: "summarization",
+      applicationId: "app-1",
+      applicationType: "agent",
+    });
   });
 
   it("does not write usage when all provider candidates fail", async () => {

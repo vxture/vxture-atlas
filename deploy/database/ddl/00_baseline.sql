@@ -285,6 +285,7 @@ CREATE TABLE model.model_grants (
     application_id   uuid,
     application_type varchar(32),
     agent_id         uuid,                                    -- [retiring] = application_id WHERE type='agent'
+    task_profile     varchar(64),                             -- NULL = ordinary grant; set = tenant's preferred model for this task profile (docs/70-workplan)
     priority         int           NOT NULL DEFAULT 100,
     is_active        boolean       NOT NULL DEFAULT true,
     reason           varchar(512),
@@ -303,6 +304,7 @@ CREATE INDEX idx_model_grants_application      ON model.model_grants (applicatio
 CREATE INDEX idx_model_grants_application_type ON model.model_grants (application_type);
 CREATE INDEX idx_model_grants_agent            ON model.model_grants (agent_id);
 CREATE INDEX idx_model_grants_is_active        ON model.model_grants (is_active);
+CREATE INDEX idx_model_grants_task_profile     ON model.model_grants (task_profile);
 
 CREATE TABLE model.model_price_rules (
     id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),

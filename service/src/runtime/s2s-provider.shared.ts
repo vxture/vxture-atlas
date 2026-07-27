@@ -17,17 +17,26 @@
 import { HttpStatus } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 
+import { BadRequestException } from "@nestjs/common";
+
 import { ProviderCapabilityNotImplementedError } from "../providers/base.provider";
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { ModelRouterService } from "../router/model-router.service";
-import { QuotaService, type QuotaCheckRequest } from "../quota/quota.service";
+import {
+  QuotaService,
+  resolveApplicationScope,
+  type QuotaCheckRequest,
+} from "../quota/quota.service";
 import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import { resolveApiKey } from "./resolve-api-key";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { AiModelRecord, IModelProvider } from "../types/runtime.types";
 
 export interface S2sProviderRequestBase extends QuotaCheckRequest {
-  modelCode: string;
+  /** Required unless `taskProfile` is given - one of the two must resolve to a model. */
+  modelCode?: string;
+  /** Task-profile routing (docs/70-workplan) - see `ChatRequest.taskProfile`. */
+  taskProfile?: string;
   requestId?: string;
 }
 
@@ -48,7 +57,8 @@ export async function resolveGatedModel(
   request: S2sProviderRequestBase,
 ): Promise<GatedModel> {
   const requestId = request.requestId?.trim() || randomUUID();
-  const model = await deps.registry.getActiveModel(request.modelCode);
+  const modelCode = await resolveModelCode(deps.registry, request);
+  const model = await deps.registry.getActiveModel(modelCode);
   await deps.quota.assertAllowed(model, request);
   const provider = deps.router.resolve(model.provider, model.modelCode);
   const apiKey = await resolveApiKey(
@@ -61,6 +71,29 @@ export async function resolveGatedModel(
   );
 
   return { model, provider, apiKey, requestId };
+}
+
+async function resolveModelCode(
+  registry: ModelRegistryService,
+  request: S2sProviderRequestBase,
+): Promise<string> {
+  const modelCode = request.modelCode?.trim();
+  if (modelCode) {
+    return modelCode;
+  }
+
+  const taskProfile = request.taskProfile?.trim();
+  if (!taskProfile) {
+    throw new BadRequestException("modelCode or taskProfile is required");
+  }
+
+  const applicationScope = resolveApplicationScope(request);
+  return registry.resolveModelCodeForTaskProfile({
+    tenantId: request.tenantId,
+    taskProfile,
+    applicationId: applicationScope.applicationId,
+    applicationType: applicationScope.applicationType,
+  });
 }
 
 export function toS2sProviderError(
