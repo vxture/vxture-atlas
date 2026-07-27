@@ -1,12 +1,26 @@
-# 80-liaison - Cross-org liaison
+# 80-liaison - Cross-org liaison (archived channel, see below)
 
-Cross-organization liaison for this repo: reply letters, integration
-agreements, and sync notes with other product lines or the platform line.
-Artifacts are named `NN-{YYMMDDHHMM}-{slug}.md` - the stamp follows the `NN-`
-index so the docs numbering guardrail still passes
-(`docs/00-meta/10-docs-convention.md`).
+**Channel change (2026-07-27, `140-repo-governance-standard.md` sec.10)**:
+cross-repo liaison (reply letters, integration agreements, sync notes) now
+goes through **GitHub Issues**, not new files here. Two real incidents drove
+this - a letter sent to the wrong repo with no lightweight correction path,
+and a drafted-but-unsent letter with no enforced state, so the other side
+acted on stale assumptions. Issues fix both: wrong-repo mistakes are fixed
+with a native `transfer`, and there is no "drafted but not sent" limbo - open
+means sent.
 
-## Outbound (drafted, not yet sent - staged pending real repo)
+**Where to open the issue**: in the repo that has to act/respond, not the
+repo that originated the ask - e.g. karda asking Atlas to change an endpoint
+opens the issue in `vxture-atlas`, not `vxture-karda`. Tag it `liaison`
+(distinct from this repo's bug/feature issues). Cross-repo references use
+native `org/repo#N` syntax - no more file-number addressing.
+
+This directory's existing `NN-{YYMMDDHHMM}-{slug}.md` files stay as archived
+history - not migrated, not deleted, just no longer added to. The docs
+numbering guardrail (`docs/00-meta/10-docs-convention.md`) still applies to
+whatever already exists here.
+
+## Outbound (historical - see channel-change note above; no longer added to)
 
 | Letter | Stamp | To | Subject | Status |
 |--------|-------|----|---------|--------|

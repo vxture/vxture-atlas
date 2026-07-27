@@ -27,7 +27,7 @@ push.
 | `50-deployment` | `50-deployment/` | infra, CI/CD, environments, bootstrap checklists, the branch-protection ruleset |
 | `60-operations` | `60-operations/` | runbooks (`NN-run-*.md`), audits, the tech-debt register (`TD-NNN`), incidents |
 | `70-workplan` | `70-workplan/` | build plan and batch tracker |
-| `80-liaison` | `80-liaison/` | cross-org liaison (reply letters, integration agreements) |
+| `80-liaison` | `80-liaison/` | archived cross-org liaison history (reply letters, integration agreements) - channel retired 2026-07-27, new liaison goes through GitHub Issues (`liaison` label) per `140-repo-governance-standard.md` sec.10, see `80-liaison/00-index.md` |
 | `90-memory` | `90-memory/` | in-repo AI handoff (`10-agent.md`) |
 
 ## Authority
