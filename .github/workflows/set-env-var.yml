@@ -58,6 +58,9 @@ jobs:
             *) echo "::error::key must be SCREAMING_SNAKE_CASE (env var name)" >&2; exit 1 ;;
           esac
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Join tailnet and prepare SSH
         uses: ./.github/actions/tailnet-ssh-connect
         with:
