@@ -9,7 +9,10 @@ export interface ParsePage {
 }
 
 export interface ParseRequest {
-  modelCode: string;
+  /** Required unless `taskProfile` is given - one of the two must resolve to a model. */
+  modelCode?: string;
+  /** Task-profile routing (docs/70-workplan) - see `ChatRequest.taskProfile`. */
+  taskProfile?: string;
   task: ParseTask;
   pages: ParsePage[];
   workspaceId: string;

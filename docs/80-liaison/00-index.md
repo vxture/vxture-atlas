@@ -1,16 +1,30 @@
-# 80-liaison - Cross-org liaison
+# 80-liaison - Cross-org liaison (archived channel, see below)
 
-Cross-organization liaison for this repo: reply letters, integration
-agreements, and sync notes with other product lines or the platform line.
-Artifacts are named `NN-{YYMMDDHHMM}-{slug}.md` - the stamp follows the `NN-`
-index so the docs numbering guardrail still passes
-(`docs/00-meta/10-docs-convention.md`).
+**Channel change (2026-07-27, `140-repo-governance-standard.md` sec.10)**:
+cross-repo liaison (reply letters, integration agreements, sync notes) now
+goes through **GitHub Issues**, not new files here. Two real incidents drove
+this - a letter sent to the wrong repo with no lightweight correction path,
+and a drafted-but-unsent letter with no enforced state, so the other side
+acted on stale assumptions. Issues fix both: wrong-repo mistakes are fixed
+with a native `transfer`, and there is no "drafted but not sent" limbo - open
+means sent.
 
-## Outbound (drafted, not yet sent - staged pending real repo)
+**Where to open the issue**: in the repo that has to act/respond, not the
+repo that originated the ask - e.g. karda asking Atlas to change an endpoint
+opens the issue in `vxture-atlas`, not `vxture-karda`. Tag it `liaison`
+(distinct from this repo's bug/feature issues). Cross-repo references use
+native `org/repo#N` syntax - no more file-number addressing.
+
+This directory's existing `NN-{YYMMDDHHMM}-{slug}.md` files stay as archived
+history - not migrated, not deleted, just no longer added to. The docs
+numbering guardrail (`docs/00-meta/10-docs-convention.md`) still applies to
+whatever already exists here.
+
+## Outbound (historical - see channel-change note above; no longer added to)
 
 | Letter | Stamp | To | Subject | Status |
 |--------|-------|----|---------|--------|
-| `10-2607241030-atlas-reply-to-karda-capability-requirements.md` | 2607241030 | karda line | Immediate answers to the two items karda asked for before finalizing its own design: G1 (429 rate-limit vs quota-exhaustion - decided now, contract shape final) and A3.3 (rerank latency - honestly deferred, no number promised until real benchmark; commits to proactively reporting once measured) | Content still valid - status corrected 2026-07-27 (repo has had a real GitHub remote since Phase 1, 2026-07-24; the "not yet a real repo" send-blocker was stale). Actually sending (e.g. an issue in vxture-karda) still needs human confirmation |
+| `10-2607241030-atlas-reply-to-karda-capability-requirements.md` | 2607241030 (updated 2607271000ish) | karda line | Immediate answers to the items karda asked for before finalizing its own design: G1 (429 rate-limit vs quota-exhaustion - decided, contract shape final), A2.3 (parse deployment affinity - now resolved: same host worker-02, feasible), A3.3 (rerank latency - honestly deferred, no number promised until real benchmark), a 2026-07-27 auth-status correction (T1/T2 token-exchange mechanism has been live since 2026-07-12 - karda's "is it implemented" premise was stale; what's actually still open is whether Atlas's own `product.products` registration has been run in production, a platform-line execution item, not a missing mechanism), plus two newly-landed capabilities karda had asked for: tenant-filtered `GET /model-platform/models?tenantId=...` (model-selector prerequisite) and `taskProfile` routing on all four A1-A4 endpoints (karda.ask auto-adaptation prerequisite) | **Sent 2026-07-27** - https://github.com/vxture/vxture-karda/issues/70 (human-confirmed before sending) |
 | `20-2607261200-atlas-provider-key-ui-handoff.md` | 2607261200 | platform line (admin-bff/console-bff/portals maintainers) | `model-platform/admin/provider-keys*` (TD-006) has no admin/console UI or BFF coverage, unlike every other model-platform resource - requests platform side add it following the existing providers pattern | Draft only - recorded as TD-007 |
 | `30-2607271000-atlas-platform-integration-readiness.md` | 2607271000 | platform line (admin-bff/console-bff/auth-bff/ops) | Consolidated status: what's ready to consume now (S2sAuthGuard-protected routes, provisioning webhook, admin API), and what's still blocked on platform (product.agent_catalog for TD-002/005, S2S token-exchange + BFF/varda caller wiring for TD-004, infra-allocation-registry sync + deploy secrets/Environment for TD-001/Phase 6) | Draft only - the infra-allocation-registry item was addressed by the platform line (see Received below, 2026-07-27); the rest is still open |
 

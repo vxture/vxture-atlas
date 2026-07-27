@@ -50,7 +50,15 @@ export type ApplicationType =
   | "internal_service";
 
 export interface ChatRequest {
-  modelCode: string;
+  /** Required unless `taskProfile` is given - one of the two must resolve to a model. */
+  modelCode?: string;
+  /**
+   * Task-profile routing (docs/70-workplan): when `modelCode` is omitted, Atlas
+   * resolves it from the tenant's active `model.model_grants.task_profile`
+   * match (see `ModelRegistryService.resolveModelCodeForTaskProfile`) instead
+   * of requiring the caller to know a specific modelCode up front.
+   */
+  taskProfile?: string;
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
@@ -260,6 +268,8 @@ export interface AiModelGrantRecord {
   applicationId: string | null;
   applicationType: ApplicationType | null;
   agentId: string | null;
+  /** Task-profile routing (docs/70-workplan) - see `ChatRequest.taskProfile`. */
+  taskProfile: string | null;
   priority: number;
   reason: string | null;
   expiresAt: Date | null;
@@ -418,6 +428,7 @@ export interface CreateAiModelGrantInput {
   applicationId?: string | null;
   applicationType?: ApplicationType | null;
   agentId?: string | null;
+  taskProfile?: string | null;
   priority?: number;
   reason?: string | null;
   expiresAt?: Date | null;
@@ -428,6 +439,7 @@ export interface UpdateAiModelGrantInput {
   applicationId?: string | null;
   applicationType?: ApplicationType | null;
   agentId?: string | null;
+  taskProfile?: string | null;
   priority?: number;
   reason?: string | null;
   expiresAt?: Date | null;

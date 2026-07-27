@@ -17,12 +17,12 @@ repo-split plan itself - not discovered later.
 |----|-------|--------|--------|
 | TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); real deploys succeeded 2026-07-27, platform infra-allocation-registry backfilled; beta tier still dormant |
 | TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocked on platform `product.agent_catalog` (see TD-005 progress note), not just C3 consume wiring |
-| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final; new platform governance checklist (product_210 §11) to self-check future changes against, see progress note |
+| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - A2.3 (parse deployment affinity) resolved 2026-07-27 (same host, worker-02, see progress note); A3.3 (rerank latency) still needs real benchmarking - blocked on a real provider, not actionable yet; new platform governance checklist (product_210 §11) to self-check future changes against, see progress note |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
 | TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
 | TD-007 | Provider-key vault (`model-platform/admin/provider-keys*`) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
-| TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | open - contract shapes for `atlas.chat`/`atlas.embed`/`atlas.rerank`/`atlas.parse` already stable (TD-003), just need registering |
+| TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | closed 2026-07-27 - `GET /.well-known/vxture-tools` implemented (`service/src/discovery/`), `S2sAuthGuard`-protected, registers all four `atlas.*` descriptors at `version: "1.0.0"` |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -148,6 +148,93 @@ repo-split plan itself - not discovered later.
   (`docs/30-design/platform/41-atlas-integration-topology.md` §7.1). Item 6
   (capability discovery via `GET /.well-known/vxture-tools`, product_210
   §4.2) is not implemented in Atlas today - tracked as TD-008.
+- **Progress (2026-07-27) - A2.3 resolved**: `vxture-platform`'s
+  `docs/50-deployment/13-infra-allocation-registry.md` confirms both the
+  atlas row and the karda(L2) row are `worker-02` (`100.76.219.48`, tailnet
+  class 2) - same physical host, same tailnet domain. Deployment affinity for
+  A2 parse calls is therefore satisfied (no cross-host hop); reflected in
+  `docs/30-design/200-s2s-provider-surface.md` §A2.3 and folded into the
+  karda reply letter (`docs/80-liaison/10-2607241030-...`). This is a
+  point-in-time fact tied to the current host assignment, not a permanent
+  guarantee - it needs re-confirming if either side's host ever changes.
+- **Progress (2026-07-27) - `aud=atlas` production registration confirmed**:
+  the one residual item flagged in the karda reply (whether Atlas's
+  `product.products` row + OIDC client `product_id` backfill had actually run
+  in production, not just merged in code) is now confirmed done - platform
+  line verified in `vxture-platform`#145 that two `db-init` seed runs
+  (2026-07-26T19:12Z, 2026-07-27T03:41Z) both completed the atlas OIDC
+  client + `product_id` backfill + plan-skeleton steps successfully. (Those
+  runs show CI "failure" on an unrelated later read-only check - a
+  pre-existing `[B0]` DDL stamp drift on the platform side, does not roll
+  back the seed and is not Atlas's concern.) karda is clear to run its
+  end-to-end `karda.ask <-> A4` check against a real `aud=atlas` token.
+  Reported back in `vxture-karda`#70. **`[B0]` itself (2026-07-27)**: owned
+  and already being remediated by the platform line on their own side - not
+  tracked as an Atlas TD entry (it is platform's own DDL stamp-table
+  bookkeeping, zero overlap with Atlas's data or this repo's DDL) and no
+  duplicate `vxture-platform` issue was opened for it, since the platform
+  line confirmed the fix is already in hand. Noted here only so a future
+  reader of this entry knows the CI "failure" on those two seed runs was
+  already understood and being worked, not an open unknown.
+
+## TD-003a - URL path asymmetry (`/model-platform/chat` vs `/v1/*`) is intentional, not debt
+
+- **What was checked (2026-07-27)**: A1/A2/A3 (`/v1/embed`, `/v1/rerank`,
+  `/v1/parse`) and the new discovery endpoint (TD-008) all live under `/v1/*`,
+  while A4 generation still answers at `/model-platform/chat` (and
+  `/model-platform/models`) - a naming asymmetry that looked like cheap,
+  free-standing cleanup.
+- **Why it was NOT changed**: `vxture-platform`'s
+  `packages/ai/model-runtime-client/src/llm/client.ts` (the shared client
+  library every consumer, including varda in production, uses to call Atlas)
+  hardcodes the literal path `/model-platform/chat` for both the non-streaming
+  and streaming call sites. This is a live, already-integrated contract, not
+  an unused legacy path waiting for a cheap rename window - renaming it here
+  would break every existing caller of that shared package with no
+  coordinated migration on the platform side.
+- **Conclusion**: leave `/model-platform/chat`/`/model-platform/models` as-is.
+  If unifying the surface is ever wanted, it needs to be a coordinated,
+  additive migration (new `/v1/chat` route added alongside the old one, old
+  one deprecated on a real timeline, `model-runtime-client` updated and
+  released, consumers migrated) - not a unilateral rename in this repo. Not
+  opening a tracked TD entry for this since it is a deliberate decision, not a
+  deferred fix.
+- **Tracked**: `vxture-atlas`#40 (kept open, blocked) and
+  `vxture-platform`#144 (liaison, opened 2026-07-27 to get the coordinated
+  `model-runtime-client` update tracked before this is revisited).
+
+## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, closed on landing)
+
+- **What was missing**: `GET /model-platform/models` returned the full
+  unfiltered model catalog regardless of caller - karda's user-facing model
+  selector needs "what can this tenant actually call," not the global list.
+  Separately, every A1-A4 call required an explicit `modelCode` - karda's
+  "automatic adaptation" features (e.g. `karda.ask`) wanted to express intent
+  (a task profile) instead of hardcoding a specific model.
+- **Landed (2026-07-27)**: both additive, non-breaking:
+  - `GET /model-platform/models?tenantId=...&applicationId=...&applicationType=...`
+    - omitting `tenantId` keeps the old unfiltered behavior; passing it
+      returns only models with an active, non-expired `model_grants` match
+      (`ModelRegistryService.listModelsForTenant`,
+      `ModelRegistryRepository.listGrantedModels`).
+  - `taskProfile` (optional) added to `ChatRequest`/`EmbedRequest`/
+    `RerankRequest`/`ParseRequest`; `modelCode` correspondingly made optional
+    - at least one of the two is required (400 otherwise). Resolution via a
+    new nullable `model.model_grants.task_profile` column (DDL +
+    Prisma in lockstep) and `ModelRegistryService.resolveModelCodeForTaskProfile`
+    /`ModelRegistryRepository.findModelCodeForTaskProfile`, wired into the A4
+    chat/stream path (`runtime.service.ts`) and the shared A1-A3 gate
+    (`s2s-provider.shared.ts`'s `resolveGatedModel`) so all four endpoints
+    share one resolution path. No match -> `404 TASK_PROFILE_NOT_ROUTABLE`,
+    never a silent default. Admin grant CRUD
+    (`model-platform/admin/grants*`) gained a `taskProfile` field so operators
+    configure this through the existing grant API, no new admin endpoint.
+  - Design: `docs/30-design/200-s2s-provider-surface.md` §7. Full test suite
+    green (256/256), `tsc --noEmit` clean.
+- **Report to karda line**: recorded in the karda reply letter
+  (`docs/80-liaison/10-2607241030-...`) as capabilities now available, since
+  these were karda's own asks (model selector prerequisite, `karda.ask`
+  auto-adaptation).
 
 ## TD-004 - BFF-to-service auth is unauthenticated
 
@@ -351,3 +438,17 @@ repo-split plan itself - not discovered later.
   self-check obligation per product_210 §11 ("由 provider 在自己的设计评审中
   自查"), not something platform gates or needs to be notified of before
   implementation.
+- **Progress (2026-07-27) - closed**: `GET /.well-known/vxture-tools`
+  implemented (`service/src/discovery/discovery.controller.ts`,
+  `tool-descriptors.ts`), `S2sAuthGuard`-protected like every other Atlas
+  route, wired into `ModelPlatformModule`. Returns `protocol_version: "1.0"`
+  plus the four descriptors (`atlas.chat`/`atlas.embed`/`atlas.rerank`/
+  `atlas.parse`) with `input_schema`/`output_schema` (JSON Schema, hand-kept
+  in sync with the real request/response types - no schema-from-TS pipeline
+  exists yet), `version: "1.0.0"`, `deprecated: false`, and a `metering`
+  declaration per capability. Self-check against product_210 §11 items 1-5/7
+  re-confirmed unchanged (auth path/error envelope/metering
+  attribution/workspace-attribution/known-consumer broadcast/cross-repo fact
+  backfill - none of this endpoint's addition altered those). Unit test added
+  (`discovery.controller.spec.ts`); full suite green (247/247), `tsc --noEmit`
+  clean.

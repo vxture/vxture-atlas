@@ -27,6 +27,7 @@ import { ProvisioningWebhookRepository } from "./provisioning/provisioning-webho
 import { ProviderKeyController } from "./provider-keys/provider-key.controller";
 import { ProviderKeyService } from "./provider-keys/provider-key.service";
 import { ProviderKeyRepository } from "./provider-keys/provider-key.repository";
+import { DiscoveryController } from "./discovery/discovery.controller";
 
 @Module({
   controllers: [
@@ -39,6 +40,7 @@ import { ProviderKeyRepository } from "./provider-keys/provider-key.repository";
     ParseController,
     ProvisioningWebhookController,
     ProviderKeyController,
+    DiscoveryController,
   ],
   providers: [
     ModelRuntimeService,

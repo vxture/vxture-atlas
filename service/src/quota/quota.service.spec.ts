@@ -288,6 +288,7 @@ function makeGrant(overrides: Partial<AiModelGrantRecord> = {}): AiModelGrantRec
     applicationId: null,
     applicationType: null,
     agentId: null,
+    taskProfile: null,
     priority: 100,
     reason: null,
     expiresAt: null,

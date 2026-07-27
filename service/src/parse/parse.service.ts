@@ -58,8 +58,8 @@ export class ParseService {
   }
 
   private validate(request: ParseRequest): void {
-    if (typeof request.modelCode !== "string" || !request.modelCode.trim()) {
-      throw new BadRequestException("modelCode is required");
+    if (!request.modelCode?.trim() && !request.taskProfile?.trim()) {
+      throw new BadRequestException("modelCode or taskProfile is required");
     }
 
     if (typeof request.workspaceId !== "string" || !request.workspaceId.trim()) {
