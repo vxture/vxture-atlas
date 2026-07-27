@@ -180,6 +180,9 @@ repo-split plan itself - not discovered later.
   released, consumers migrated) - not a unilateral rename in this repo. Not
   opening a tracked TD entry for this since it is a deliberate decision, not a
   deferred fix.
+- **Tracked**: `vxture-atlas`#40 (kept open, blocked) and
+  `vxture-platform`#144 (liaison, opened 2026-07-27 to get the coordinated
+  `model-runtime-client` update tracked before this is revisited).
 
 ## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, closed on landing)
 
