@@ -45,6 +45,13 @@ once `product.agent_catalog` lands.
 see TD-003 progress note. Real provider integration still open (product/cost
 decision).
 
+**Platform governance update (2026-07-27)**: `product_210_tool-protocol.md`
+bumped to v1.1, adding §11 - a 7-item self-check checklist L1 providers must
+run through before shipping new/breaking S2S supply-side contract changes
+(not a platform gate, self-checked in each provider's own design review).
+Also adds a capability-discovery requirement (`GET /.well-known/vxture-tools`,
+§4.2) Atlas doesn't implement yet - tracked as TD-008.
+
 **C3 provisioning webhook - done 2026-07-24**: `POST /provisioning/webhook`
 implemented per `docs/30-design/identity/080-rp-integration.md` §4/§5 (the
 same wire contract already live in production for arda) - HMAC-SHA256
@@ -102,6 +109,19 @@ product-row (currently "待分配") still needs a matching update - out of
 write-scope for this repo/session; real secrets (`DEPLOY_WORKER02_SSH_KEY`,
 `DEPLOY_WORKER02_KNOWN_HOSTS`, ACR/tailscale credentials) and the GitHub
 `production` Environment are not yet created.
+
+**Done 2026-07-27**: all of the above landed - `production` GitHub
+Environment created, `DEPLOY_WORKER02_*` secrets (org-level, shared across
+10 repos deploying to worker-02), `ALIYUN_ACR_NAMESPACE`/`APP_PUBLISH_PORT`
+set; `v0.1.0`/`v0.1.1`/`v0.1.2` deployed successfully end to end (build ->
+ACR/GHCR push -> SSH deploy -> DDL apply -> health verify). Along the way,
+found and fixed four real bugs that had never been exercised before (see
+git history: Dockerfile `.npmrc` missing, Dockerfile secret-mount id
+mismatch, `db-init.yml` DDL applied via a host path that doesn't exist
+inside the container, `wget` missing from the runtime image for the
+healthcheck). `vxture-platform`'s `13-infra-allocation-registry.md` atlas
+row has been backfilled accordingly ("在产", worker-02:3100) - confirmed
+directly in that file.
 
 ## Phase 7 - cutover and acceptance
 
