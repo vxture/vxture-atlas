@@ -92,6 +92,36 @@ placeholders, product catalog row + 5-tier DRAFT plan skeleton) - see the
 platform repo's `deploy/database/seed/seed-catalog.mjs` and
 `docs/30-design/product_100_matrix.md` atlas row.
 
+## Provider API keys - separate env file (2026-07-28)
+
+Provider API keys (`DOUBAO_API_KEY` etc., the legacy `apiKeyEnvVar` path)
+load from `<stack_root>/etc/.env.provider-keys` - a file **separate** from
+the general operator `<stack_root>/etc/.env`, wired as a second
+`env_file:` entry in `docker-compose.yml` (`APP_PROVIDER_KEYS_ENV_FILE`,
+default `.env.provider-keys`, `required: false`).
+
+Why separate: `deploy.yml`'s bootstrap step only auto-creates
+`<stack_root>/etc/.env` from a GitHub secret on first deploy - it never
+touches this file. An operator creates it manually via SSH, which means it
+can carry stricter host permissions (`chmod 400`, owner-only) than the
+general `.env`, and its plaintext never transits GitHub Actions at all
+(unlike the bootstrapped `.env`, which arrives via a base64 `ENV_FILE_BASE64`
+secret). Smaller blast radius for the one class of secret that's
+runtime-hot (read on every model call) rather than deploy-time.
+
+```bash
+# on the deploy host, one-time setup:
+sudo touch /srv/md0/atlas/etc/.env.provider-keys
+sudo chmod 400 /srv/md0/atlas/etc/.env.provider-keys
+sudo nano /srv/md0/atlas/etc/.env.provider-keys   # add DOUBAO_API_KEY=<real key>
+cd /srv/md0/atlas && docker compose restart app    # env_file is read at container start
+```
+
+TD-006's managed vault (`key.provider_api_keys`, envelope-encrypted,
+configured via `model-platform/admin/provider-keys*`) is the target state
+and needs neither this file nor the main `.env` at all - this file only
+matters for models still on the legacy `config.apiKeyEnvVar` path.
+
 ## Deploy pipeline
 
 `deploy.yml` / `build.yml` / `rollback.yml` / `db-init.yml` and the

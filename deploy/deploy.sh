@@ -23,6 +23,12 @@ set -euo pipefail
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"     # /srv/md0/atlas on worker-02 - see docs/50-deployment/00-index.md
 ENV_FILE="$ROOT/etc/.env"
+# Provider API keys live in a separate, never-CI-bootstrapped file (operator
+# creates it manually via SSH, chmod 400) - stricter permissions and a
+# narrower blast radius than the general operator .env. Optional: compose's
+# `required: false` means its absence is fine (e.g. before an operator has
+# onboarded any provider key yet).
+PROVIDER_KEYS_ENV_FILE="$ROOT/etc/.env.provider-keys"
 COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 
 # Product code: from the environment (CI passes PRODUCT_CODE), else the
@@ -43,6 +49,7 @@ compose() {
   PROJECT_NAME="$PROJECT_NAME" \
   DATA_DIR="$DATA_DIR" \
   APP_ENV_FILE="$ENV_FILE" \
+  APP_PROVIDER_KEYS_ENV_FILE="$PROVIDER_KEYS_ENV_FILE" \
   IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}" \
   IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-vxture}" \
   IMAGE_TAG="${IMAGE_TAG:-latest}" \
