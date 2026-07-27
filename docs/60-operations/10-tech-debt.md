@@ -208,7 +208,7 @@ repo-split plan itself - not discovered later.
   `vxture-platform`#144 (liaison, opened 2026-07-27 to get the coordinated
   `model-runtime-client` update tracked before this is revisited).
 
-## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, closed on landing)
+## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, merged to main, not yet deployed)
 
 - **What was missing**: `GET /model-platform/models` returned the full
   unfiltered model catalog regardless of caller - karda's user-facing model
@@ -240,6 +240,19 @@ repo-split plan itself - not discovered later.
   (`docs/80-liaison/10-2607241030-...`) as capabilities now available, since
   these were karda's own asks (model selector prerequisite, `karda.ask`
   auto-adaptation).
+- **Correction (2026-07-27, flagged by karda in `vxture-karda`#72)**: the
+  karda reply letter's §6 said these were "already shipped" - at the time of
+  writing that was premature (the work existed only as local, uncommitted
+  changes in that session). Merged into `main` since via PR #44 (squash
+  commit `6ea81ac`), which is real and confirmed. **But merged-to-main is
+  not the same as deployed** - this repo's deploy model is tag-triggered,
+  not merge-triggered, and the running production instance
+  (`worker-02:3100`) is still on `v0.1.2`, which predates this work. Told
+  karda directly (`vxture-karda`#72) to hold off flipping
+  `ATLAS_ASK_TASK_PROFILE` against production traffic until a new version
+  tag actually ships. **Recovery condition**: cut and deploy a `v0.1.3`\+
+  tag, then confirm back to karda that the capability is live, not just
+  merged.
 
 ## TD-004 - BFF-to-service auth is unauthenticated
 
