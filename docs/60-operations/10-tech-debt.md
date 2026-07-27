@@ -208,7 +208,7 @@ repo-split plan itself - not discovered later.
   `vxture-platform`#144 (liaison, opened 2026-07-27 to get the coordinated
   `model-runtime-client` update tracked before this is revisited).
 
-## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, merged to main, not yet deployed)
+## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, deployed and confirmed live)
 
 - **What was missing**: `GET /model-platform/models` returned the full
   unfiltered model catalog regardless of caller - karda's user-facing model
@@ -253,6 +253,12 @@ repo-split plan itself - not discovered later.
   tag actually ships. **Recovery condition**: cut and deploy a `v0.1.3`\+
   tag, then confirm back to karda that the capability is live, not just
   merged.
+- **Deployed (2026-07-27)**: `v0.1.3` tagged and deployed to production
+  (`worker-02:3100`), reviewer-approved through the `production` GitHub
+  Environment gate. Health verify passed (`verify OK (health 200)`) at
+  2026-07-27T11:52 UTC; `VERSION` on the host is `8bd52b3`. Confirmed back to
+  karda in `vxture-karda`#72 - cleared to use `ATLAS_ASK_TASK_PROFILE`
+  against production traffic now.
 
 ## TD-004 - BFF-to-service auth is unauthenticated
 
