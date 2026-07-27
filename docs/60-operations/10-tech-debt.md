@@ -15,13 +15,14 @@ repo-split plan itself - not discovered later.
 
 | ID | Title | Opened | Status |
 |----|-------|--------|--------|
-| TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); secrets/GitHub Environment/registry mirror still open |
+| TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); real deploys succeeded 2026-07-27, platform infra-allocation-registry backfilled; beta tier still dormant |
 | TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocked on platform `product.agent_catalog` (see TD-005 progress note), not just C3 consume wiring |
-| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final |
+| TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - rerank latency (A3.3) and parse deployment affinity (A2.3) still need real benchmarking/host assignment before final; new platform governance checklist (product_210 §11) to self-check future changes against, see progress note |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
 | TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
 | TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
 | TD-007 | Provider-key vault (`model-platform/admin/provider-keys*`) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
+| TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | open - contract shapes for `atlas.chat`/`atlas.embed`/`atlas.rerank`/`atlas.parse` already stable (TD-003), just need registering |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -50,6 +51,13 @@ repo-split plan itself - not discovered later.
   different repo, out of this session's write-scope); real `DEPLOY_*`/ACR/
   tailscale secrets; the `production` GitHub Environment itself; the beta
   tier (still dormant, no dedicated beta host).
+- **Progress (2026-07-27)**: real `v0.1.0`/`v0.1.1`/`v0.1.2` deploys to
+  worker-02:3100 succeeded end to end (build -> ACR/GHCR push -> SSH deploy ->
+  DDL apply -> health verify), closing the "cannot be exercised" half of this
+  entry. `vxture-platform`'s `13-infra-allocation-registry.md` atlas row has
+  now been backfilled to reflect this ("在产" / worker-02:3100, 2026-07-27) -
+  verified directly in that file. Still open: beta tier (no dedicated beta
+  host).
 
 ## TD-002 - usage-metering write path is a no-op
 
@@ -128,6 +136,18 @@ repo-split plan itself - not discovered later.
   `RERANK_UNAVAILABLE`'s fast-fail-on-unhealthy-provider signal are not
   implemented either - both need a real provider integration to have
   anything to rate-limit or degrade, so they follow once a provider is chosen.
+- **Progress (2026-07-27) - new governance checklist to self-check against**:
+  `vxture-platform`'s `docs/30-design/product_210_tool-protocol.md` bumped to
+  v1.1, adding §11 "供给面契约变更检查单" - a mandatory 7-item self-check
+  (auth path / error semantics / metering attribution / workspace-attribution
+  principle / known-consumer broadcast / capability-discovery registration /
+  cross-repo fact backfill) that Atlas (as an L1 provider) must run through
+  before shipping any new or breaking S2S supply-side contract change. Not a
+  platform-gated approval - self-checked in Atlas's own design review, per
+  the "platform issues standards, not gateways" rule
+  (`docs/30-design/platform/41-atlas-integration-topology.md` §7.1). Item 6
+  (capability discovery via `GET /.well-known/vxture-tools`, product_210
+  §4.2) is not implemented in Atlas today - tracked as TD-008.
 
 ## TD-004 - BFF-to-service auth is unauthenticated
 
@@ -296,3 +316,38 @@ repo-split plan itself - not discovered later.
   undocumented.
 - **Report to platform line**: handoff letter drafted,
   `docs/80-liaison/20-2607261200-atlas-provider-key-ui-handoff.md`.
+
+## TD-008 - no capability-discovery endpoint (product_210 §11 item 6)
+
+- **What is missing**: `vxture-platform`'s `docs/30-design/product_210_tool-protocol.md`
+  v1.1 §11 (new 2026-07-27) requires every L1 provider shipping tool
+  descriptors to expose `GET /.well-known/vxture-tools` (§4.2) - a
+  tailnet-only, S2S-token-authenticated endpoint returning an array of tool
+  descriptors (`name`, `title`, `description`, `input_schema`,
+  `output_schema?`, `version`, `deprecated`, `metering?`, `authz?`) +
+  `protocol_version`, so consumers (karda/arda/terra/L3 agents) can query
+  availability instead of relying on liaison letters. Atlas has no such
+  endpoint.
+- **Why it is debt, not just unscheduled**: this is a newly-landed governance
+  requirement (not something Atlas missed earlier), but Atlas already has
+  four stable contract shapes to register - `atlas.chat` (generation),
+  `atlas.embed`, `atlas.rerank`, `atlas.parse` (TD-003, contract layer
+  already implemented and, per ADR-002, not expected to change shape even
+  though real provider integration is still pending). There is nothing
+  blocking registering them now.
+- **Recovery condition**: add a `GET /.well-known/vxture-tools` route
+  (S2sAuthGuard-protected, same as every other Atlas route) that returns the
+  four descriptors above with `version: "1.0.0"`, `deprecated: false`, and
+  `metering`/`authz` filled in per each capability's actual semantics
+  (e.g. `atlas.chat`'s metering metric, `atlas.embed`'s batch/vector-dimension
+  contract already documented in `docs/30-design/200-s2s-provider-surface.md`).
+- **Self-check against product_210 §11 while building this**: per the same
+  checklist this item exists because of, also confirm items 1-5/7 still hold
+  for Atlas's existing embed/rerank/parse/chat contracts (auth path, error
+  envelope, metering attribution, workspace-attribution principle, known-
+  consumer broadcast, cross-repo fact backfill) - this is Atlas's own
+  self-review obligation per §11, not a platform gate.
+- **Report to platform line**: none needed - this is Atlas's own
+  self-check obligation per product_210 §11 ("由 provider 在自己的设计评审中
+  自查"), not something platform gates or needs to be notified of before
+  implementation.
