@@ -23,12 +23,22 @@ services:
         BUILD_TIME: ${BUILD_TIME:-unknown}
         DEPLOY_STAGE: ${DEPLOY_STAGE:-dev}
     image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-vxture}/${PRODUCT_CODE:-atlas}-app:${IMAGE_TAG:-local}
-    # Load the full operator .env into the app so ALL runtime config (provider
-    # keys, platform client, webhook, INTERNAL_JOB_TOKEN, ...) reaches it - not
-    # just the few keys in `environment:` below. APP_ENV_FILE is the absolute
-    # path deploy.sh passes (<root>/etc/.env); local dev falls back to ./.env.
+    # Load the full operator .env into the app so ALL runtime config (platform
+    # client, webhook, INTERNAL_JOB_TOKEN, ...) reaches it - not just the few
+    # keys in `environment:` below. APP_ENV_FILE is the absolute path
+    # deploy.sh passes (<root>/etc/.env); local dev falls back to ./.env.
+    #
+    # Provider API keys (DOUBAO_API_KEY etc., legacy `apiKeyEnvVar` path -
+    # TD-006's managed vault is the target state) load from a SEPARATE file,
+    # not the main .env: this one is never CI-bootstrapped (deploy.yml only
+    # auto-creates <root>/etc/.env, never this file), so it can carry
+    # stricter host permissions (chmod 400, owner-only) and a narrower blast
+    # radius than the general operator .env. `required: false` - its absence
+    # is normal until an operator manually creates it on the host.
     env_file:
       - path: ${APP_ENV_FILE:-.env}
+        required: false
+      - path: ${APP_PROVIDER_KEYS_ENV_FILE:-.env.provider-keys}
         required: false
     environment:
       NODE_ENV: production

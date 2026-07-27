@@ -4,6 +4,7 @@
 .env.*
 !.env.example
 !.env.local.example
+!.env.provider-keys.example
 !deploy/env/*.env
 .env.bak.*
 .npmrc
