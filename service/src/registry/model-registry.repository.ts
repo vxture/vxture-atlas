@@ -1,6 +1,7 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 
 import { prisma, type AiModelRow } from "../prisma";
+import { ModelRuntimeException } from "../runtime/runtime.errors";
 import type {
   AiModelGrantRecord,
   AiModelRecord,
@@ -25,6 +26,28 @@ import type {
 } from "../types/runtime.types";
 
 const COMMERCE_SENTINEL_UUID = "00000000-0000-0000-0000-000000000000";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `model.model_grants.tenant_id`/`application_id` are `uuid` columns
+ * (`deploy/database/ddl/00_baseline.sql`) with no FK (boundary #1) - nothing
+ * validated the shape of these before they hit Postgres. A non-UUID value
+ * (e.g. a caller's own composite tenant identifier instead of the platform's
+ * actual UUID) previously crashed as an unhandled Prisma UUID-cast error,
+ * surfacing as an opaque 500 (found live via karda's first real end-to-end
+ * probe, `vxture-atlas`#47) instead of a clean 400.
+ */
+function assertUuid(value: string, code: "INVALID_TENANT_ID" | "INVALID_APPLICATION_ID", label: string): void {
+  if (!UUID_PATTERN.test(value)) {
+    throw new ModelRuntimeException(
+      HttpStatus.BAD_REQUEST,
+      code,
+      `${label} must be a UUID (got a non-UUID value) - use the platform tenant/workspace id from your token context, not an internal composite identifier`,
+    );
+  }
+}
 
 // model.models dropped the `provider` varchar column; provider identity is now the joined
 // model_providers.provider_code. Every model read pulls it so AiModelRecord.provider stays populated.
@@ -220,6 +243,9 @@ export class ModelRegistryRepository {
     applicationId: string,
     applicationType: ApplicationType,
   ): Promise<AiModelGrantRecord | null> {
+    assertUuid(tenantId, "INVALID_TENANT_ID", "tenantId");
+    assertUuid(applicationId, "INVALID_APPLICATION_ID", "applicationId");
+
     const grants = await prisma.modelGrant.findMany({
       where: {
         modelId,
@@ -274,6 +300,9 @@ export class ModelRegistryRepository {
     applicationId: string,
     applicationType: ApplicationType,
   ): Promise<string | null> {
+    assertUuid(tenantId, "INVALID_TENANT_ID", "tenantId");
+    assertUuid(applicationId, "INVALID_APPLICATION_ID", "applicationId");
+
     const grants = await prisma.modelGrant.findMany({
       where: {
         tenantId,
@@ -329,6 +358,11 @@ export class ModelRegistryRepository {
     applicationId?: string;
     applicationType?: ApplicationType;
   }): Promise<AiModelRecord[]> {
+    assertUuid(filters.tenantId, "INVALID_TENANT_ID", "tenantId");
+    if (filters.applicationId) {
+      assertUuid(filters.applicationId, "INVALID_APPLICATION_ID", "applicationId");
+    }
+
     const grants = await prisma.modelGrant.findMany({
       where: {
         tenantId: filters.tenantId,
