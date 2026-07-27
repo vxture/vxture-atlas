@@ -7,7 +7,8 @@
  * @date 2026-06-06
  */
 
-import { Controller, Get, Inject, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 
 import {
   ModelPlatformHealthService,
@@ -15,6 +16,7 @@ import {
   type ModelPlatformReadyResponse,
 } from "./health.service";
 import { InternalDiagnosticsGuard } from "./guards/internal-diagnostics.guard";
+import { renderStatusPage } from "./status-page";
 
 @Controller()
 export class HealthController {
@@ -42,5 +44,16 @@ export class HealthController {
   @UseGuards(InternalDiagnosticsGuard)
   diagnostics(): Promise<ModelPlatformReadyResponse> {
     return this.health.diagnostics();
+  }
+
+  // Human-readable equivalent of karda/arda's portal /status page - same
+  // gating as diagnostics (InternalDiagnosticsGuard), same underlying data
+  // as health/ready, just rendered as HTML since Atlas has no portal to host
+  // a Next.js page in.
+  @Get("status")
+  @UseGuards(InternalDiagnosticsGuard)
+  async statusPage(@Res() res: Response): Promise<void> {
+    const data = await this.health.ready();
+    res.type("html").send(renderStatusPage(data));
   }
 }
