@@ -168,14 +168,19 @@ repo-split plan itself - not discovered later.
   pre-existing `[B0]` DDL stamp drift on the platform side, does not roll
   back the seed and is not Atlas's concern.) karda is clear to run its
   end-to-end `karda.ask <-> A4` check against a real `aud=atlas` token.
-  Reported back in `vxture-karda`#70. **`[B0]` itself (2026-07-27)**: owned
-  and already being remediated by the platform line on their own side - not
-  tracked as an Atlas TD entry (it is platform's own DDL stamp-table
-  bookkeeping, zero overlap with Atlas's data or this repo's DDL) and no
-  duplicate `vxture-platform` issue was opened for it, since the platform
-  line confirmed the fix is already in hand. Noted here only so a future
-  reader of this entry knows the CI "failure" on those two seed runs was
-  already understood and being worked, not an open unknown.
+  Reported back in `vxture-karda`#70. **`[B0]` itself - resolved
+  (2026-07-27)**: the platform-side DDL stamp restamp actually landed (SSH +
+  psql), confirmed by a dedicated `db-init` verify run showing all of
+  A/B/C/C2 passing ("baseline audit OK - schema set exact (19 targets),
+  table count == DDL (114), seed catalog floors met, super_admin full-grant
+  (54/54)"). Platform posted the closing evidence as a follow-up on
+  `vxture-platform`#145 - it doesn't change the atlas-registration
+  confirmation already given above, just closes the one loose end. Still not
+  an Atlas TD entry (platform's own DDL stamp-table bookkeeping, zero overlap
+  with this repo's DDL) - kept here only as the closing note to the mention
+  above, not a design change to the stamp mechanism itself
+  (`data_platform_320_target-cutover.md` documents that generically; this was
+  a one-off drift incident on the platform side, not a mechanism change).
 
 ## TD-003a - URL path asymmetry (`/model-platform/chat` vs `/v1/*`) is intentional, not debt
 
