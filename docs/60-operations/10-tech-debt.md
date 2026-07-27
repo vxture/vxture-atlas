@@ -23,6 +23,7 @@ repo-split plan itself - not discovered later.
 | TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
 | TD-007 | Provider-key vault (`model-platform/admin/provider-keys*`) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
 | TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | closed 2026-07-27 - `GET /.well-known/vxture-tools` implemented (`service/src/discovery/`), `S2sAuthGuard`-protected, registers all four `atlas.*` descriptors at `version: "1.0.0"` |
+| TD-009 | `ModelGrantsPage.tsx` (vxture-platform admin portal) has no `taskProfile` form field - operators can only configure task-profile routing (TD-003b) via raw API call, not through the Admin UI | 2026-07-27 | open - not this repo's write-scope; same pattern as TD-007 (backend shipped, platform UI not updated); reported alongside TD-007 in `vxture-platform`#148 (marked discussion/decision, also raises the broader architecture question of Atlas's admin surface living entirely in a different repo) |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -476,3 +477,33 @@ repo-split plan itself - not discovered later.
   backfill - none of this endpoint's addition altered those). Unit test added
   (`discovery.controller.spec.ts`); full suite green (247/247), `tsc --noEmit`
   clean.
+
+## TD-009 - `ModelGrantsPage.tsx` has no `taskProfile` field
+
+- **What is missing**: TD-003b added `taskProfile` to `model.model_grants`
+  and the admin grant CRUD API (`model-platform/admin/grants*`) already
+  accepts/returns it. `vxture-platform`'s admin portal
+  (`portals/admin/src/modules/ai/ModelGrantsPage.tsx`) has a working
+  create/update grant form (agentId, priority, reason) but no `taskProfile`
+  input - an operator can only set it by calling the API directly with a
+  valid S2S token, not through the UI.
+- **Why it is debt, not just unscheduled**: same shape as TD-007 - Atlas
+  ships a backend capability, the platform-side operator surface doesn't get
+  updated in lockstep, so the one thing operators are most likely to want to
+  configure routinely (which model a taskProfile resolves to, per tenant) has
+  no operator-facing surface.
+- **Recovery condition**: `vxture-platform` adds a `taskProfile` text input
+  to `ModelGrantsPage.tsx`'s grant create/update form, following the same
+  shape as the existing agentId/priority/reason fields - the API it would
+  call already exists and is stable.
+- **Why this is not implemented in this repo**: same as TD-007 - `vxture-atlas`
+  is a services-profile repo with no `portals/`, the UI lives in
+  `vxture-platform`, out of this repo's write-scope.
+- **Report to platform line**: reported alongside TD-007 in
+  `vxture-platform`#148 (`liaison`), which also raises a broader architecture
+  question - whether Atlas's admin surface living entirely in a different
+  repo is the right long-term shape, given this is the second time a shipped
+  Atlas capability has had no operator-facing surface, plus an industry
+  comparison (ops/admin vs tenant console vs product-embedded surface) for
+  the platform line to weigh. Marked explicitly as a discussion/decision
+  item, not just a bug report.
