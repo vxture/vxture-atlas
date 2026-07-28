@@ -52,6 +52,7 @@ export class ParseService {
         providerKeys: this.providerKeys,
       },
       gateRequest,
+      auth,
     );
 
     try {

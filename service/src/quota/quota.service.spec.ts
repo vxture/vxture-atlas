@@ -67,7 +67,16 @@ function makeQuota(
 
 // Bypass private access for Phase 1 testing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const svc = new QuotaService(null as any);
+
+// TD-016: entitlement resolution is exercised in platform-entitlement.client.spec.ts
+// and the dedicated cases at the bottom of this file; the pre-existing tests
+// predate C2 and must keep asserting the grant/commerce behaviour unchanged, so
+// they get a client that never resolves (i.e. the old fail-open path).
+function stubEntitlements(over?: { resolve?: unknown }) {
+  return { resolve: over?.resolve ?? (async () => ({ kind: "not-configured" })) };
+}
+
+const svc = new QuotaService(null as any, stubEntitlements() as never);
 const isModelAllowed = (
   model: AiModelRecord,
   quota: TenantSubscriptionQuotaRecord,
@@ -317,7 +326,7 @@ describe("QuotaService.assertAllowed", () => {
       findBestGrant: vi.fn().mockResolvedValue(null),
       findCurrentSubscriptionQuota: vi.fn(),
     };
-    const svc = new QuotaService(repository as never);
+    const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     await expect(
       svc.assertAllowed(makeModel(), makeRequest()),
@@ -333,7 +342,7 @@ describe("QuotaService.assertAllowed", () => {
         .mockResolvedValue(makeQuota({ periodTokens: 0n })),
       findUsageSummary: vi.fn().mockResolvedValue(null),
     };
-    const svc = new QuotaService(repository as never);
+    const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     await expect(
       svc.assertAllowed(makeModel(), makeRequest()),
@@ -348,7 +357,7 @@ describe("QuotaService.assertAllowed", () => {
         .mockResolvedValue(makeQuota({ periodTokens: 1_000n })),
       findUsageSummary: vi.fn().mockResolvedValue(null),
     };
-    const svc = new QuotaService(repository as never);
+    const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     const ctx = await svc.assertAllowed(makeModel(), makeRequest());
     expect(ctx.remaining).toBe(1_000n);
@@ -359,7 +368,7 @@ describe("QuotaService.assertAllowed", () => {
       findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
       findCurrentSubscriptionQuota: vi.fn().mockResolvedValue(null),
     };
-    const svc = new QuotaService(repository as never);
+    const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     const ctx = await svc.assertAllowed(
       makeModel({ provider: "private", modelCode: "my-llm" }),
@@ -368,5 +377,75 @@ describe("QuotaService.assertAllowed", () => {
 
     expect(ctx.remaining).toBe(-1n);
     expect(ctx.quota.periodTokens).toBe(-1n);
+  });
+});
+
+describe("QuotaService C2 entitlement gate (TD-016)", () => {
+  const model = makeModel({ modelCode: "glm-5.2" });
+  const WS = "22222222-2222-4222-8222-222222222222";
+  const grantRepo = {
+    findBestGrant: vi.fn(async () => ({ id: "g1" })),
+    findCurrentSubscriptionQuota: vi.fn(async () => null),
+  };
+
+  function svcWith(resolve: () => Promise<unknown>) {
+    return new QuotaService(
+      grantRepo as never,
+      stubEntitlements({ resolve }) as never,
+    );
+  }
+
+  it("denies when the platform reports every pool exhausted", async () => {
+    // The first time this gate can actually say no - before TD-016 it had no
+    // resolvable source at all, so it always fell through to fail-open.
+    const svc = svcWith(async () => ({
+      kind: "resolved",
+      view: { quota_pools: [{ metric: "atlas.chat", limit: 100, remaining: 0, priority: 1 }] },
+    }));
+
+    await expect(
+      svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
+    ).rejects.toMatchObject({ code: "QUOTA_EXCEEDED" });
+  });
+
+  it("allows when any pool still has balance", async () => {
+    const svc = svcWith(async () => ({
+      kind: "resolved",
+      view: { quota_pools: [{ metric: "atlas.chat", limit: 100, remaining: 7, priority: 1 }] },
+    }));
+
+    await expect(
+      svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("allows when resolved but uncovered - atlas's plan catalog is still a draft", async () => {
+    // Denying here would take down live traffic (karda's included) over a
+    // bookkeeping gap on the platform side, not a real entitlement decision.
+    const svc = svcWith(async () => ({
+      kind: "resolved",
+      view: { quota_pools: [] },
+    }));
+
+    await expect(
+      svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("fails open when the platform is unreachable, rather than denying", async () => {
+    const svc = svcWith(async () => ({ kind: "unreachable", reason: "ETIMEDOUT" }));
+
+    await expect(
+      svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("skips the C2 read entirely when the token carries no workspace", async () => {
+    const resolve = vi.fn(async () => ({ kind: "not-configured" }));
+    const svc = svcWith(resolve as never);
+
+    await svc.assertAllowed(model, { tenantId: WS }, {});
+
+    expect(resolve).not.toHaveBeenCalled();
   });
 });

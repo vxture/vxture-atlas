@@ -31,7 +31,7 @@ repo-split plan itself - not discovered later.
 | TD-014 | Build provenance never reached the image: `build.yml` passed `APP_VERSION`/`GIT_SHA`/`BUILD_TIME`/`DEPLOY_STAGE` as build-args but `service/Dockerfile` declared no matching `ARG`, so Docker silently dropped all four and production `/healthz` reported `version:"dev"`, `gitSha:"unknown"`, `stage:"dev"` - violating standard 025 §4/§6/§7, the exact failure mode that standard exists to prevent | 2026-07-28 | closed 2026-07-28 - four `ARG`+`ENV` added to the runtime stage with honest defaults; found by self-review, after the v0.1.9 deploy verification had to fall back to `docker ps` image tags because the health endpoint could not say which build was live |
 | TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
 
-| TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | open - CLAUDE.md corrected to stop asserting it exists; the client itself is unbuilt |
+| TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | partially closed 2026-07-28 - the client exists now (`PlatformEntitlementClient`, shared-secret path, short-TTL cache) and the quota gate can deny for the first time when the platform reports pools exhausted; enforcement of the *uncovered* case stays permissive until the platform publishes a real `atlas` plan_version, which it says is still a draft skeleton |
 | TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | partially closed 2026-07-28 - part 1 shipped: Atlas now writes its own `reqlog.request_records`/`error_records` on every A1-A4 call (success and failure), attribution taken from the verified S2S token rather than the body; verified against a real Postgres. Part 2 (the platform `POST /usage/consume` call that fills `usage_event_id`) still open |
 | TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | closed 2026-07-28 - `reqlog.ensure_partitions`/`drop_expired_partitions` added as db-init-applied DDL (the sole sanctioned structure-change path), retention set to 6 months, and a `reqlogPartitions` readiness check added so exhaustion can no longer fail silently; verified against a real Postgres incl. the expiry drop and DEFAULT-occupancy detection |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
@@ -962,3 +962,36 @@ repo-split plan itself - not discovered later.
   protection is actually enforced either, and the reference
   `main-ruleset.json` those repos were bootstrapped from carries the defect,
   so any new repo inherits it.
+
+### TD-016 - progress note (2026-07-28)
+
+- **Shipped**: `service/src/platform/platform-entitlement.client.ts` reads
+  `PLATFORM_API_URL` + `PLATFORM_INTERNAL_AUTH_TOKEN` (owner-transported
+  2026-07-28) and calls C2
+  `GET /platform/entitlements?workspace_id=&product=atlas` with the
+  `x-vxture-internal-auth` header - the same shared-secret path arda uses in
+  production. The T1 alternative was rejected for now: it gates on a published
+  `atlas` plan_version, which the platform says is still an unpublished draft,
+  so it would fail for every workspace (`vxture-atlas`#66).
+- **Three outcomes, deliberately not collapsed into a nullable return**:
+  `resolved` / `unreachable` / `not-configured`. "The platform says this
+  workspace has no entitlement" and "we could not ask the platform" are
+  opposite facts; flattening them is precisely how TD-005's bounded fail-open
+  became permanent and invisible.
+- **The gate can now say no**: a resolved view whose pools are all exhausted
+  raises `403 QUOTA_EXCEEDED`. That is the first real denial this service has
+  ever been able to issue.
+- **Deliberately still permissive** when the view resolves with *no* coverage
+  (`quota_pools: []`). Atlas's plan catalog is an unpublished draft, so every
+  workspace legitimately reads as uncovered today - denying on that would take
+  down live traffic (karda's included) over a platform-side bookkeeping gap,
+  not an entitlement decision. This flips to a denial the moment a real
+  plan_version is published; no Atlas change needed.
+- **Cached** 30s per workspace (`PLATFORM_ENTITLEMENT_CACHE_TTL_MS`), because
+  this sits on the hot path of every inference call. Only `resolved` outcomes
+  are cached - an `unreachable` verdict must not pin degradation for a full
+  TTL after the platform recovers.
+- **Not closed**: the `limits`/`tier` axes of the envelope are still unused,
+  and the legacy `TenantSubscriptionQuotaRecord` path below it remains the
+  no-op stub from TD-005. Closing that is the same work as TD-017 part 2 (the
+  C3 consume caller), which shares this client's credential and base URL.

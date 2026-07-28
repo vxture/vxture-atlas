@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 
 import { ModelRegistryRepository } from "../registry/model-registry.repository";
+import { PlatformEntitlementClient } from "../platform/platform-entitlement.client";
 import { ModelRuntimeException } from "../runtime/runtime.errors";
 import type {
   AiModelRecord,
@@ -74,11 +75,50 @@ export class QuotaService {
   constructor(
     @Inject(ModelRegistryRepository)
     private readonly repository: ModelRegistryRepository,
+    @Inject(PlatformEntitlementClient)
+    private readonly entitlements: PlatformEntitlementClient,
   ) {}
+
+  /**
+   * TD-016: consult the platform's C2 entitlement view before falling back.
+   *
+   * Three outcomes, deliberately not collapsed:
+   *  - a real pool with nothing left  -> deny. This is the first time this
+   *    gate can actually say no.
+   *  - resolved but no coverage       -> allow, and say why. Atlas's plan
+   *    catalog is still an unpublished draft on the platform side, so every
+   *    workspace legitimately reads as uncovered today; denying on that would
+   *    take down live traffic (karda's included) for a bookkeeping gap.
+   *  - unreachable / not configured   -> bounded fail-open, per the platform's
+   *    own doctrine (data_model_200_schema.md §3).
+   */
+  private async checkEntitlement(
+    model: AiModelRecord,
+    workspaceId: string | undefined,
+  ): Promise<void> {
+    if (!workspaceId) return;
+
+    const outcome = await this.entitlements.resolve(workspaceId);
+    if (outcome.kind !== "resolved") return;
+
+    const pools = outcome.view.quota_pools ?? [];
+    if (pools.length === 0) return;
+
+    const exhausted = pools.every((pool) => pool.remaining <= 0);
+    if (exhausted) {
+      throw new ModelRuntimeException(
+        HttpStatus.FORBIDDEN,
+        "QUOTA_EXCEEDED",
+        "Workspace has no remaining quota for atlas",
+        { modelCode: model.modelCode },
+      );
+    }
+  }
 
   async assertAllowed(
     model: AiModelRecord,
     request: QuotaCheckRequest,
+    auth?: { workspaceId?: string | undefined },
   ): Promise<QuotaContext> {
     const now = new Date();
     const applicationScope = resolveApplicationScope(request);
@@ -97,6 +137,8 @@ export class QuotaService {
         { modelCode: model.modelCode },
       );
     }
+
+    await this.checkEntitlement(model, auth?.workspaceId);
 
     // Tenant-wide quota for now. Once the gateway→commerce mapping exists (#9),
     // resolve the request's per-app subscription and pass its id here to use the
