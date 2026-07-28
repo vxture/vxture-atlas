@@ -81,7 +81,21 @@ tenants carry no tenancy claim and get a `403 TENANCY_SCOPE_UNAVAILABLE`.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/tenancy/models` | Models this workspace holds an active grant for |
+| GET | `/tenancy/grants` | The grants themselves, incl. `taskProfile`/`priority`; operator-only `reason` is not projected |
+| GET | `/tenancy/quotas` | Entitlement from the platform's C2 envelope |
 | GET | `/tenancy/usage` | `?scope=workspace\|tenant`, `?days=1..366` (default 30) |
+
+Together these are the full replacement set for what `console-bff` reads from
+`/capability/*` today (models / grants / quotas / usage-summaries), which is
+the precondition for locking the capability plane to operator tokens
+(`vxture-atlas`#52).
+
+`/tenancy/quotas` reads the **C2 envelope**, not Atlas's legacy
+`tenant_subscription_quotas` mirror - the DB split left that a stub returning
+`[]` (TD-005), which would render "no plan published" and "platform
+unreachable" as the same empty page. `status` separates them: `covered` /
+`uncovered` (resolved, no coverage - expected while atlas's plan catalog is an
+unpublished draft) / `unavailable` (could not ask).
 
 Two levels because the platform's model has two: workspace is the
 cost-accounting unit, tenant (org) is the rollup above it, and a tenant
