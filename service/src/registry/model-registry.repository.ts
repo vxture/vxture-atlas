@@ -579,6 +579,37 @@ export class ModelRegistryRepository {
   }
 
   /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
+  /**
+   * TD-018: reqlog partition runway + DEFAULT-partition occupancy, for the
+   * readiness check. Reads `pg_inherits` because partitions have no Prisma
+   * model. The query is a constant - nothing here is caller-derived.
+   *
+   * The partition month is recovered from the child's own name suffix, which
+   * `reqlog.ensure_partitions` generates (see
+   * `deploy/database/ddl/incr/02_reqlog_partition_maintenance.sql`), so naming
+   * and parsing stay a closed loop.
+   */
+  readReqlogPartitionRunway(): Promise<
+    Array<{ monthsAhead: bigint | number; defaultPartitionRows: bigint | number }>
+  > {
+    return prisma.$queryRawUnsafe(`
+      SELECT
+        (SELECT count(*)
+           FROM pg_inherits inh
+           JOIN pg_class c      ON c.oid = inh.inhrelid
+           JOIN pg_class parent ON parent.oid = inh.inhparent
+           JOIN pg_namespace n  ON n.oid = c.relnamespace
+          WHERE n.nspname = 'reqlog'
+            AND parent.relname = 'request_records'
+            AND c.relname ~ '_y[0-9]{4}m[0-9]{2}$'
+            AND to_date(right(c.relname, 8), '"y"YYYY"m"MM')
+                >= date_trunc('month', now())::date
+        ) AS "monthsAhead",
+        (SELECT count(*) FROM ONLY reqlog.request_records_default)
+          AS "defaultPartitionRows"
+    `);
+  }
+
   listUsageSummaries(_filters: {
     tenantId?: string;
     applicationId?: string;

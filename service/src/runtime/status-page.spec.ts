@@ -21,6 +21,7 @@ function makeReady(
       providerKeys: { status: "pass", checkedKeys: 1, missing: [] },
       quotaRead: { status: "pass", latencyMs: 1, activeQuotas: 0 },
       usageSummaryRead: { status: "pass", latencyMs: 1, summaries: 0 },
+      reqlogPartitions: { status: "pass", latencyMs: 1, monthsAhead: 12, defaultPartitionRows: 0 },
     },
     ...overrides,
   };
@@ -58,6 +59,7 @@ describe("renderStatusPage", () => {
           providerKeys: { status: "pass" },
           quotaRead: { status: "pass" },
           usageSummaryRead: { status: "pass" },
+      reqlogPartitions: { status: "pass", monthsAhead: 12 },
         },
       }),
     );
@@ -77,6 +79,7 @@ describe("renderStatusPage", () => {
           providerKeys: { status: "pass" },
           quotaRead: { status: "pass" },
           usageSummaryRead: { status: "pass" },
+      reqlogPartitions: { status: "pass", monthsAhead: 12 },
         },
       }),
     );
