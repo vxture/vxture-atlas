@@ -10,6 +10,7 @@ import { ModelAdminService } from "./runtime/model-admin.service";
 import { MeteringService } from "./metering/metering.service";
 import { ClaudeProvider } from "./providers/claude.provider";
 import { DoubaoProvider } from "./providers/doubao.provider";
+import { ZhipuProvider } from "./providers/zhipu.provider";
 import { PrivateModelProvider } from "./providers/private.provider";
 import { ModelRegistryRepository } from "./registry/model-registry.repository";
 import { ModelRegistryService } from "./registry/model-registry.service";
@@ -52,6 +53,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     QuotaService,
     MeteringService,
     DoubaoProvider,
+    ZhipuProvider,
     ClaudeProvider,
     PrivateModelProvider,
     EmbeddingService,
