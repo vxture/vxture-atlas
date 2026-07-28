@@ -20,6 +20,34 @@ history - not migrated, not deleted, just no longer added to. The docs
 numbering guardrail (`docs/00-meta/10-docs-convention.md`) still applies to
 whatever already exists here.
 
+## GitHub-Issues era (2026-07-27 onward) - live index, not archived
+
+The actual liaison threads now live as GitHub Issues (`liaison` label,
+opened in whichever repo has to act). This table is a pointer index only -
+issue state is the source of truth, not this row.
+
+| Issue | Repo | Subject | Status |
+|---|---|---|---|
+| [#34](https://github.com/vxture/vxture-atlas/issues/34) | atlas | Reply to karda's letter 140 | Closed - sent as `karda`#70 |
+| [#35](https://github.com/vxture/vxture-atlas/issues/35) | atlas | A2.3 deployment affinity conclusion | Closed - same host (worker-02) |
+| [#36](https://github.com/vxture/vxture-atlas/issues/36) | atlas | A3.3 rerank P95 benchmark | Open - blocked on #39 (no real rerank provider yet) |
+| [#37](https://github.com/vxture/vxture-atlas/issues/37) | atlas | A1 real embedding provider | Open - product/cost decision |
+| [#38](https://github.com/vxture/vxture-atlas/issues/38) | atlas | A2 real parse provider | Open - product/cost decision |
+| [#39](https://github.com/vxture/vxture-atlas/issues/39) | atlas | A3 real rerank provider | Open - product/cost decision |
+| [#40](https://github.com/vxture/vxture-atlas/issues/40) | atlas | `/model-platform/chat` -> `/v1/chat` rename | Open - blocked on `platform`#144 |
+| [#41](https://github.com/vxture/vxture-atlas/issues/41) | atlas | Tenant-scoped model list | Closed - shipped, deployed, confirmed live |
+| [#42](https://github.com/vxture/vxture-atlas/issues/42) | atlas | taskProfile routing | Closed - shipped, deployed, confirmed live |
+| [#43](https://github.com/vxture/vxture-atlas/issues/43) | atlas | Capability discovery endpoint | Closed - shipped (TD-008) |
+| [#47](https://github.com/vxture/vxture-atlas/issues/47) | atlas | karda's real end-to-end integration test | Closed - full chain proven live (TD-010/011/012) |
+| [#144](https://github.com/vxture/vxture-platform/issues/144) | platform | `model-runtime-client` coordination for #40 | Open - parked, no action needed yet |
+| [#145](https://github.com/vxture/vxture-platform/issues/145) | platform | Confirm Atlas production registration | Closed |
+| [#147](https://github.com/vxture/vxture-platform/issues/147) | platform | (karda-side coverage gap, closed by karda) | Closed |
+| [#148](https://github.com/vxture/vxture-platform/issues/148) | platform | Atlas admin-UI gaps + admin-surface architecture discussion | Open - `product_250_management-plane-contract.md` v0.1 draft in review, Batch A/B not yet landed |
+| [#152](https://github.com/vxture/vxture-platform/issues/152) | platform | `modelCode` provider-prefix breaks real upstream calls | Open - options laid out, not yet decided |
+| [karda#70](https://github.com/vxture/vxture-karda/issues/70) | karda | Atlas's reply to letter 140 | Closed |
+| [karda#72](https://github.com/vxture/vxture-karda/issues/72) | karda | Model-selection UX direction confirmation | Closed - both modes, phased, taskProfile first |
+| [karda#76](https://github.com/vxture/vxture-karda/issues/76) | karda | karda.ask host cutover tracking | Closed - real generation confirmed, cutover proceeding |
+
 ## Outbound (historical - see channel-change note above; no longer added to)
 
 | Letter | Stamp | To | Subject | Status |
