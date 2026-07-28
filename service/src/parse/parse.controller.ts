@@ -1,6 +1,7 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
 
 import { S2sAuthGuard } from "../runtime/guards/s2s-auth.guard";
+import type { S2sAuthenticatedRequest } from "../runtime/guards/s2s-auth.guard";
 import { ParseService, type ParseResponse } from "./parse.service";
 import type { ParseRequest } from "./parse.types";
 
@@ -9,8 +10,12 @@ import type { ParseRequest } from "./parse.types";
 export class ParseController {
   constructor(private readonly parse: ParseService) {}
 
+  // TD-017: attribution comes from the verified token, never the body (rule 8).
   @Post()
-  run(@Body() body: ParseRequest): Promise<ParseResponse> {
-    return this.parse.parse(body);
+  run(
+    @Body() body: ParseRequest,
+    @Req() req: S2sAuthenticatedRequest,
+  ): Promise<ParseResponse> {
+    return this.parse.parse(body, req.s2sAuth);
   }
 }

@@ -1,0 +1,107 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { prisma } from "../prisma";
+import { RequestLogService } from "./request-log.service";
+
+const VALID_UUID = "2a4271d4-ac9a-4fa6-b479-4f71d8e996e8";
+
+describe("RequestLogService.record", () => {
+  let create: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    create = vi.fn().mockResolvedValue({});
+    vi.spyOn(prisma.requestRecord, "create").mockImplementation(
+      create as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("writes the served request with its Atlas domain facts", async () => {
+    await new RequestLogService().record({
+      requestId: "req-1",
+      status: "success",
+      workspaceId: VALID_UUID,
+      modelCode: "glm-5.2",
+      providerCode: "zhipu",
+      inputTokens: 12,
+      outputTokens: 34,
+      totalTokens: 46,
+      latencyMs: 250,
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    const { data } = (create.mock.calls[0] as [{ data: Record<string, unknown> }])[0];
+    expect(data).toMatchObject({
+      requestId: "req-1",
+      status: "success",
+      workspaceId: VALID_UUID,
+      modelCode: "glm-5.2",
+      providerCode: "zhipu",
+      inputTokens: 12n,
+      outputTokens: 34n,
+      totalTokens: 46n,
+      latencyMs: 250,
+    });
+  });
+
+  it("nulls a non-UUID attribution value instead of losing the whole row", async () => {
+    // karda's real tenantId is a composite string, not a UUID (TD-010). Writing
+    // it raw would abort the INSERT on a uuid cast and we would record nothing -
+    // including the model/provider/token facts that were perfectly valid.
+    await new RequestLogService().record({
+      requestId: "req-2",
+      status: "success",
+      tenantId: "org-acme/ws-main",
+      workspaceId: VALID_UUID,
+      modelCode: "glm-5.2",
+    });
+
+    const { data } = (create.mock.calls[0] as [{ data: Record<string, unknown> }])[0];
+    expect(data["tenantId"]).toBeNull();
+    expect(data["workspaceId"]).toBe(VALID_UUID);
+    expect(data["modelCode"]).toBe("glm-5.2");
+  });
+
+  it("never lets a log-write failure escape into the caller's request", async () => {
+    // The hard rule: an inference call that succeeded must not be turned into
+    // an error because the observability write failed.
+    create.mockRejectedValue(new Error("partition missing"));
+
+    await expect(
+      new RequestLogService().record({ requestId: "req-3", status: "success" }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("RequestLogService.recordError", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("truncates an oversized provider error body rather than dropping the row", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    vi.spyOn(prisma.errorRecord, "create").mockImplementation(create as never);
+
+    await new RequestLogService().recordError({
+      requestId: "req-4",
+      errorCode: "PROVIDER_UNAVAILABLE",
+      errorMessage: "x".repeat(9000),
+    });
+
+    const { data } = (create.mock.calls[0] as [{ data: Record<string, unknown> }])[0];
+    expect((data["errorMessage"] as string).length).toBe(4000);
+  });
+
+  it("swallows its own failures too", async () => {
+    vi.spyOn(prisma.errorRecord, "create").mockRejectedValue(
+      new Error("db down") as never,
+    );
+
+    await expect(
+      new RequestLogService().recordError({ requestId: "req-5" }),
+    ).resolves.toBeUndefined();
+  });
+});

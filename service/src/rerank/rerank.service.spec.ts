@@ -51,11 +51,17 @@ function makeService(
   const router = { resolve: vi.fn().mockReturnValue(provider) };
   const providerKeys = { resolveKey: vi.fn().mockResolvedValue(null) };
 
+  const requestLog = {
+    record: vi.fn().mockResolvedValue(undefined),
+    recordError: vi.fn().mockResolvedValue(undefined),
+  };
+
   const service = new RerankService(
     registry as never,
     router as never,
     quota as never,
     providerKeys as never,
+    requestLog as never,
   );
 
   return { service, registry, quota, router, provider, providerKeys };
