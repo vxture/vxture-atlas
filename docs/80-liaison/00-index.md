@@ -50,6 +50,11 @@ issue state is the source of truth, not this row.
 | [#156](https://github.com/vxture/vxture-platform/issues/156) | platform | Actionable checklist: update model-runtime-client/admin-bff/console-bff to `/v1`\|`/capability` before next Atlas deploy | Open - urgent |
 | [#159](https://github.com/vxture/vxture-platform/issues/159) | platform | product_210 §4.1 `ToolDescriptor` has no endpoint/path field - discovery can't announce a path change (TD-015) | Open - proposal, awaiting platform decision |
 | [#164](https://github.com/vxture/vxture-platform/issues/164) | platform | Governance gap: no sanctioned path for recurring DB maintenance (TD-018) | Open - proposal, awaiting platform decision |
+| [#68](https://github.com/vxture/vxture-atlas/issues/68) | atlas | Apply fixed ruleset to live config - admin bypass still active (TD-020) | Open - blocked on a privileged repo-settings call |
+| [#167](https://github.com/vxture/vxture-platform/issues/167) | platform | SECURITY: branch protection advisory org-wide; the reference artifact carries the defect (TD-020) | Open |
+| [karda#82](https://github.com/vxture/vxture-karda/issues/82) | karda | Same admin bypass on karda's ruleset (TD-020) | Open |
+| [arda#187](https://github.com/vxture/vxture-arda/issues/187) | arda | Same admin bypass on arda's ruleset (TD-020) | Open |
+| [template#37](https://github.com/vxture/vxture-template/issues/37) | template | Same admin bypass; every new repo inherits it (TD-020) | Open |
 | [karda#70](https://github.com/vxture/vxture-karda/issues/70) | karda | Atlas's reply to letter 140 | Closed |
 | [karda#72](https://github.com/vxture/vxture-karda/issues/72) | karda | Model-selection UX direction confirmation | Closed - both modes, phased, taskProfile first |
 | [karda#76](https://github.com/vxture/vxture-karda/issues/76) | karda | karda.ask host cutover tracking | Closed - real generation confirmed, cutover proceeding |
