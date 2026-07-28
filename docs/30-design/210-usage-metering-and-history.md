@@ -117,12 +117,28 @@ anywhere. See TD-002 / TD-016 / TD-017.
 
 - Platform: monthly partitions on `usage_events(_pools)`; tiered summary
   retention with expiry by partition DROP (§2 above).
-- Atlas: `reqlog.*` partitions are pre-built **2026-07 through 2027-01 only**,
-  plus a `DEFAULT` catch-all. The baseline DDL notes a maintenance job
-  "should roll this forward (create month-after-next, detach+drop expired
-  partitions) once deployed" - that job does not exist. From 2027-02 every
-  row lands in the DEFAULT partition, which defeats drop-based retention
-  entirely (see TD-018).
-- Atlas retention policy itself is undecided. It should be **shorter** than
-  the platform's summary tiers - this is operational detail, not a financial
-  record, and it is the higher-volume of the two.
+- Atlas: **retention is 6 months** (owner decision 2026-07-28). Rationale:
+  twice the platform's finest summary tier (`usage_summary_hours`, ~3 months),
+  so cross-quarter reconciliation and incident lookback both work, while
+  staying bounded - this is one row per request, not a rollup. It is
+  deliberately shorter than the platform's tiers: operational detail, not a
+  financial record, and the higher-volume of the two.
+- Mechanism (TD-018): `reqlog.ensure_partitions(months_ahead)` and
+  `reqlog.drop_expired_partitions(retain_months, dry_run)` in
+  `deploy/database/ddl/incr/02_reqlog_partition_maintenance.sql`. Applying
+  that file installs both and extends the runway 12 months, so a db-init run
+  is itself a complete maintenance pass. Expiry is never invoked implicitly -
+  dropping data is a separate, deliberate call with `dry_run=false`.
+- **Why db-init and not a cron/in-app job**: creating a partition is a DDL
+  structure change, and `140-repo-governance-standard.md` §6 makes db-init
+  (`confirm=yes` + `expected_sha` + production approval) the sole sanctioned
+  path - "常规部署链不跑 migration/seed，DB 结构/数据变更是独立授权动作". An
+  in-app scheduler would make the application itself an unaudited
+  structure-change path. That the standard has no sanctioned *recurring*
+  maintenance path is a real gap, raised with the platform line rather than
+  worked around locally (see TD-018).
+- **The silence is the defect, so it is now loud**: `/readyz` carries a
+  `reqlogPartitions` check reporting `monthsAhead` (warn below 2) and
+  `defaultPartitionRows` (fail above 0 - rows there mean retention is already
+  broken, not merely about to be). Running out of runway can no longer pass
+  unnoticed.

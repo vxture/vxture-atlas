@@ -135,10 +135,16 @@ CREATE TABLE IF NOT EXISTS reqlog.error_records (
 CREATE INDEX IF NOT EXISTS idx_error_records_request_id ON reqlog.error_records (request_id);
 CREATE INDEX IF NOT EXISTS idx_error_records_error_code ON reqlog.error_records (error_code);
 
--- Pre-built monthly partitions (current + 6 months ahead, starting 2026-07) +
--- a DEFAULT catch-all so a missed pre-build never silently drops writes. A
--- maintenance job (pg_cron / external scheduler) should roll this forward
--- (create "month after next", detach+drop expired partitions) once deployed.
+-- Bootstrap partitions for a fresh install: a fixed window starting 2026-07 +
+-- a DEFAULT catch-all so a missed pre-build never silently drops writes.
+--
+-- This window is deliberately NOT the whole story - it is create-once and its
+-- start date is frozen. Ongoing roll-forward and expiry live in
+-- `incr/02_reqlog_partition_maintenance.sql` (TD-018), which installs
+-- `reqlog.ensure_partitions()` / `reqlog.drop_expired_partitions()` and
+-- extends the runway from the *current* month on every db-init apply. Do not
+-- widen the window below instead of running that - `/readyz`'s
+-- `reqlogPartitions` check reports the real remaining runway.
 DO $$
 DECLARE
   parts text[] := ARRAY['reqlog.request_records', 'reqlog.error_records'];

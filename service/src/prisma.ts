@@ -153,6 +153,12 @@ export interface AtlasPrismaClient {
   errorRecord: PrismaDelegate<ErrorRecordRow>;
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
+  /**
+   * Only for fixed, constant catalogue queries with no interpolation - the
+   * reqlog partition-runway readiness check (TD-018) reads `pg_inherits`,
+   * which has no Prisma model. Never pass caller-derived input here.
+   */
+  $queryRawUnsafe<T>(query: string): Promise<T>;
   $transaction<T>(
     fn: (tx: AtlasPrismaClient) => Promise<T>,
   ): Promise<T>;

@@ -33,7 +33,7 @@ repo-split plan itself - not discovered later.
 
 | TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | open - CLAUDE.md corrected to stop asserting it exists; the client itself is unbuilt |
 | TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | partially closed 2026-07-28 - part 1 shipped: Atlas now writes its own `reqlog.request_records`/`error_records` on every A1-A4 call (success and failure), attribution taken from the verified S2S token rather than the body; verified against a real Postgres. Part 2 (the platform `POST /usage/consume` call that fills `usage_event_id`) still open |
-| TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | open - dormant while TD-017 keeps the tables empty; becomes a live clock the moment usage writing lands |
+| TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | closed 2026-07-28 - `reqlog.ensure_partitions`/`drop_expired_partitions` added as db-init-applied DDL (the sole sanctioned structure-change path), retention set to 6 months, and a `reqlogPartitions` readiness check added so exhaustion can no longer fail silently; verified against a real Postgres incl. the expiry drop and DEFAULT-occupancy detection |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
@@ -876,3 +876,42 @@ repo-split plan itself - not discovered later.
 - **Known limitation**: A1/A3 provider responses carry no token counts (Zhipu
   reports none for embedding/rerank), so those columns stay NULL for those
   capabilities rather than being invented. Latency and attribution are real.
+
+### TD-018 - progress note (2026-07-28, closed)
+
+- **Retention decided**: 6 months (owner, 2026-07-28) - twice the platform's
+  finest summary tier so cross-quarter reconciliation and incident lookback
+  both work, while staying bounded for a per-request table. Recorded in
+  `docs/30-design/210-usage-metering-and-history.md` §6, which previously
+  flagged this as undecided.
+- **Mechanism**: `deploy/database/ddl/incr/02_reqlog_partition_maintenance.sql`
+  installs `reqlog.ensure_partitions(months_ahead)` and
+  `reqlog.drop_expired_partitions(retain_months, dry_run)`, then calls
+  `ensure_partitions(12)` - so applying the file is itself a maintenance pass
+  and a single db-init run restores 12 months of runway. Expiry is
+  deliberately **not** invoked by the file: dropping data must be an explicit
+  act with `dry_run=false`, never a side effect of applying DDL.
+- **Why not pg_cron or an in-app scheduler**: creating a partition is a DDL
+  structure change, and `140-repo-governance-standard.md` §6 makes db-init
+  (`confirm=yes` + `expected_sha` + production approval) the sole sanctioned
+  path, explicitly stating the routine deploy chain must not run
+  migration/seed. An in-app job would turn the application into an unaudited
+  structure-change path - trading a silent retention failure for a silent
+  governance violation. `postgres:16-alpine` also ships no pg_cron.
+- **The real fix is the alarm, not the automation**: TD-018's danger was that
+  exhaustion is *silent* - writes keep succeeding into DEFAULT while
+  drop-based retention quietly becomes impossible. `/readyz` now carries a
+  `reqlogPartitions` check with two independent signals: `monthsAhead` (warn
+  below 2) and `defaultPartitionRows` (fail above 0 - any row there means
+  retention is already broken, not merely about to be). Monthly cadence can
+  now be driven by an observable signal rather than someone's memory.
+- **Verified against a real Postgres**, not only mocks: baseline + this file
+  applied cleanly; re-running created 0 new partitions (idempotent); an
+  artificially aged partition was reported by `dry_run` and then really
+  detached+dropped; the `DEFAULT` partition was never touched; the exact
+  runway query returned 13 months; and a write dated beyond the runway landed
+  in DEFAULT and was detected. Three readiness tests cover warn/fail/pass.
+- **Remaining gap, reported not worked around**: the governance standard has
+  no sanctioned path for *recurring* DB maintenance - only manually-approved
+  one-off runs. Today that means someone must trigger db-init roughly twice a
+  year (12-month runway, warn at 2). Raised with the platform line.

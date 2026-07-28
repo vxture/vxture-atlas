@@ -40,6 +40,7 @@ export interface AtlasReadyResponse extends ServiceIdentity {
     providerKeys: HealthCheckResult;
     quotaRead: HealthCheckResult;
     usageSummaryRead: HealthCheckResult;
+    reqlogPartitions: HealthCheckResult;
   };
 }
 
@@ -58,12 +59,19 @@ export class AtlasHealthService {
   }
 
   async ready(): Promise<AtlasReadyResponse> {
-    const [database, modelRegistry, quotaRead, usageSummaryRead] =
+    const [
+      database,
+      modelRegistry,
+      quotaRead,
+      usageSummaryRead,
+      reqlogPartitions,
+    ] =
       await Promise.all([
         this.checkDatabase(),
         this.checkModelRegistry(),
         this.checkQuotaRead(),
         this.checkUsageSummaryRead(),
+        this.checkReqlogPartitions(),
       ]);
     const providerKeys =
       modelRegistry.status === "fail"
@@ -78,6 +86,7 @@ export class AtlasHealthService {
         providerKeys,
         quotaRead,
         usageSummaryRead,
+        reqlogPartitions,
       ]),
       checks: {
         database,
@@ -85,6 +94,7 @@ export class AtlasHealthService {
         providerKeys,
         quotaRead,
         usageSummaryRead,
+        reqlogPartitions,
       },
     };
   }
@@ -160,6 +170,57 @@ export class AtlasHealthService {
       checkedKeys: keyNames.length,
       missing: [],
     };
+  }
+
+  /**
+   * TD-018: reqlog partitions are pre-built a fixed number of months ahead.
+   * When they run out, **nothing errors** - rows silently land in the DEFAULT
+   * partition and keep working, while drop-based retention quietly stops
+   * being possible. That silence is the actual defect, so it gets a readiness
+   * signal rather than relying on someone remembering the calendar.
+   *
+   * Two independent signals:
+   *  - `monthsAhead`: how much runway is left. Low = act soon.
+   *  - `defaultPartitionRows`: must be 0. Any row here means a write already
+   *    landed with no proper partition - retention is broken *now*, not soon.
+   */
+  private async checkReqlogPartitions(): Promise<HealthCheckResult> {
+    const startedAt = Date.now();
+    try {
+      const [row] = await this.repository.readReqlogPartitionRunway();
+      const monthsAhead = Number(row?.monthsAhead ?? 0);
+      const defaultPartitionRows = Number(row?.defaultPartitionRows ?? 0);
+      const latencyMs = Date.now() - startedAt;
+
+      if (defaultPartitionRows > 0) {
+        return {
+          status: "fail",
+          latencyMs,
+          monthsAhead,
+          defaultPartitionRows,
+          message:
+            "reqlog rows landed in the DEFAULT partition - explicit partitions were missing, so drop-based retention is already broken (TD-018); run db-init to extend partitions, then relocate these rows",
+        };
+      }
+
+      if (monthsAhead < 2) {
+        return {
+          status: "warn",
+          latencyMs,
+          monthsAhead,
+          defaultPartitionRows,
+          message: `only ${monthsAhead} month(s) of reqlog partitions remain - run db-init to extend before they run out (TD-018)`,
+        };
+      }
+
+      return { status: "pass", latencyMs, monthsAhead, defaultPartitionRows };
+    } catch (error) {
+      return {
+        status: "fail",
+        latencyMs: Date.now() - startedAt,
+        message: errorMessage(error),
+      };
+    }
   }
 
   private async checkQuotaRead(): Promise<HealthCheckResult> {

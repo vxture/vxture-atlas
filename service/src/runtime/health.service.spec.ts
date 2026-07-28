@@ -27,6 +27,9 @@ function makeRepository(
     ]),
     listSubscriptionQuotas: vi.fn(async () => [makeQuota()]),
     listUsageSummaries: vi.fn(async () => [makeUsageSummary()]),
+    readReqlogPartitionRunway: vi.fn(async () => [
+      { monthsAhead: 12, defaultPartitionRows: 0 },
+    ]),
     ...overrides,
   } as unknown as ModelRegistryRepository;
 }
@@ -172,5 +175,55 @@ describe("AtlasHealthService", () => {
       status: "fail",
       activeModels: 0,
     });
+  });
+});
+
+describe("AtlasHealthService reqlog partition runway (TD-018)", () => {
+  it("degrades readiness when the partition runway is nearly exhausted", async () => {
+    process.env["MODEL_PLATFORM_TEST_KEY"] = "x";
+    const service = new AtlasHealthService(
+      makeRepository({
+        readReqlogPartitionRunway: vi.fn(async () => [
+          { monthsAhead: 1, defaultPartitionRows: 0 },
+        ]),
+      }),
+    );
+
+    const result = await service.ready();
+
+    expect(result.checks.reqlogPartitions.status).toBe("warn");
+    expect(result.status).toBe("degraded");
+    delete process.env["MODEL_PLATFORM_TEST_KEY"];
+  });
+
+  it("blocks readiness once rows have landed in the DEFAULT partition", async () => {
+    // This is the state TD-018 warns about: writes kept succeeding, nothing
+    // errored, and drop-based retention silently stopped being possible.
+    process.env["MODEL_PLATFORM_TEST_KEY"] = "x";
+    const service = new AtlasHealthService(
+      makeRepository({
+        readReqlogPartitionRunway: vi.fn(async () => [
+          { monthsAhead: 0, defaultPartitionRows: 4210 },
+        ]),
+      }),
+    );
+
+    const result = await service.ready();
+
+    expect(result.checks.reqlogPartitions.status).toBe("fail");
+    expect(result.checks.reqlogPartitions["defaultPartitionRows"]).toBe(4210);
+    expect(result.status).toBe("blocked");
+    delete process.env["MODEL_PLATFORM_TEST_KEY"];
+  });
+
+  it("passes with healthy runway", async () => {
+    process.env["MODEL_PLATFORM_TEST_KEY"] = "x";
+    const service = new AtlasHealthService(makeRepository());
+
+    const result = await service.ready();
+
+    expect(result.checks.reqlogPartitions.status).toBe("pass");
+    expect(result.checks.reqlogPartitions["monthsAhead"]).toBe(12);
+    delete process.env["MODEL_PLATFORM_TEST_KEY"];
   });
 });
