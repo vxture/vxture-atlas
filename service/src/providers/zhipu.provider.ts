@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import { BaseProvider, ProviderHttpError, joinEndpoint } from "./base.provider";
+import { BaseProvider, ProviderHttpError, joinEndpoint, resolveUpstreamModel } from "./base.provider";
 import {
   buildOpenAiCompatibleBody,
   normalizeOpenAiCompatibleResponse,
@@ -94,7 +94,7 @@ export class ZhipuProvider extends BaseProvider {
     const response = await this.postJson<ZhipuEmbeddingResponse>(
       joinEndpoint(request.endpointUrl, "embeddings"),
       { authorization: `Bearer ${request.apiKey}` },
-      { model: request.modelCode, input: request.texts },
+      { model: resolveUpstreamModel(request), input: request.texts },
     );
 
     // Response `data` is documented index-ordered, but sort defensively
@@ -123,7 +123,7 @@ export class ZhipuProvider extends BaseProvider {
       joinEndpoint(request.endpointUrl, "rerank"),
       { authorization: `Bearer ${request.apiKey}` },
       {
-        model: request.modelCode,
+        model: resolveUpstreamModel(request),
         query: request.query,
         documents: request.candidates.map((candidate) => candidate.text),
       },

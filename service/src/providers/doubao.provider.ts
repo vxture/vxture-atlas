@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import { BaseProvider, joinEndpoint, ProviderHttpError } from "./base.provider";
+import { BaseProvider, joinEndpoint, ProviderHttpError, resolveUpstreamModel } from "./base.provider";
 import type {
   OpenAiCompatibleChatResponse,
   OpenAiCompatibleChatStreamChunk,
@@ -70,7 +70,7 @@ export function buildOpenAiCompatibleBody(
   stream: boolean,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    model: request.modelCode,
+    model: resolveUpstreamModel(request),
     messages: request.messages.map(toWireMessage),
     temperature: request.temperature,
     max_tokens: request.maxTokens,

@@ -5,6 +5,7 @@ import {
   ProviderCapabilityNotImplementedError,
   joinEndpoint,
   parseJson,
+  resolveUpstreamModel,
 } from "./base.provider";
 import type {
   ProviderChatRequest,
@@ -144,5 +145,56 @@ describe("BaseProvider default S2S capabilities (embed/rerank/parseDocument)", (
       expect(typed.providerName).toBe("stub");
       expect(typed.capability).toBe("embed");
     }
+  });
+});
+
+// ── resolveUpstreamModel (platform#152 / TD-012 follow-up) ──────────────────
+
+describe("resolveUpstreamModel", () => {
+  it("prefers config.upstreamModel when present", () => {
+    expect(
+      resolveUpstreamModel({
+        modelCode: "deepseek/deepseek-chat",
+        config: { upstreamModel: "deepseek-chat" },
+      }),
+    ).toBe("deepseek-chat");
+  });
+
+  it("falls back to modelCode when upstreamModel is absent", () => {
+    // The legacy unprefixed rows (doubao/zhipu today) - and any model that
+    // has not been given an explicit upstreamModel yet.
+    expect(
+      resolveUpstreamModel({ modelCode: "glm-5.2", config: {} }),
+    ).toBe("glm-5.2");
+    expect(resolveUpstreamModel({ modelCode: "glm-5.2" })).toBe("glm-5.2");
+  });
+
+  it("falls back when upstreamModel is present but blank", () => {
+    expect(
+      resolveUpstreamModel({
+        modelCode: "glm-5.2",
+        config: { upstreamModel: "   " },
+      }),
+    ).toBe("glm-5.2");
+  });
+
+  it("falls back when upstreamModel is a non-string value", () => {
+    // config is caller-controlled jsonb - a malformed value must not throw or
+    // silently send "[object Object]" upstream.
+    expect(
+      resolveUpstreamModel({
+        modelCode: "glm-5.2",
+        config: { upstreamModel: 123 },
+      }),
+    ).toBe("glm-5.2");
+  });
+
+  it("trims the resolved value", () => {
+    expect(
+      resolveUpstreamModel({
+        modelCode: "glm-5.2",
+        config: { upstreamModel: "  glm-5.2  " },
+      }),
+    ).toBe("glm-5.2");
   });
 });
