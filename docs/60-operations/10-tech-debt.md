@@ -36,6 +36,8 @@ repo-split plan itself - not discovered later.
 | TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | closed 2026-07-28 - `reqlog.ensure_partitions`/`drop_expired_partitions` added as db-init-applied DDL (the sole sanctioned structure-change path), retention set to 6 months, and a `reqlogPartitions` readiness check added so exhaustion can no longer fail silently; verified against a real Postgres incl. the expiry drop and DEFAULT-occupancy detection |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
+| TD-020 | Branch protection was advisory for admins: `main-ruleset.json` declared `bypass_actors: [RepositoryRole 5 (admin), bypass_mode: always]`, so a direct `git push origin main` from an admin account succeeded silently despite CLAUDE.md stating direct pushes are BLOCKED - found when exactly that push went through by accident. All four org repos (atlas/platform/karda/arda/template) carry the same bypass | 2026-07-28 | Atlas fixed 2026-07-28 (`bypass_actors: []` in the authoritative file + applied to the live ruleset); org-wide exposure reported to the platform line |
+
 ## TD-001 - deploy host unassigned; beta tier dormant
 
 - **Clause not yet met**: `140-repo-governance-standard.md` section 4 - product
@@ -921,3 +923,42 @@ repo-split plan itself - not discovered later.
   operations, so the operation set is approved once instead of every run.
   Left to the platform line to decide once for every repo with partitioned
   tables, rather than each inventing its own mechanism.
+
+## TD-020 - branch protection was advisory for admins
+
+- **What was wrong**: `docs/50-deployment/rebuild/main-ruleset.json` - the
+  authoritative ruleset - declared
+  `bypass_actors: [{actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always"}]`.
+  `actor_id 5` is the repo **admin** role, and `always` means bypass in every
+  situation, including a direct push. So all five rules (PR required, five
+  required checks, linear history, no force-push, no deletion) were advisory
+  for any admin. This was not configuration drift: the live ruleset matched
+  the file exactly. The declaration itself contradicted `CLAUDE.md`'s stated
+  guarantee that "Direct `git push origin main` is BLOCKED by the ruleset
+  (must go through a PR, and the required checks must pass)".
+- **How it was found**: not by audit - by accident. A docs commit was pushed
+  straight to `main` while wrapping up TD-018, expecting the ruleset to reject
+  it. It succeeded, CI ran on `main` post-hoc, and the commit was already
+  public before anyone noticed. Every guarantee in the branch model had been
+  unenforced since the repo was bootstrapped (2026-07-24).
+- **Why it matters beyond process tidiness**: the five required checks include
+  `gitleaks` and `audit`. An admin push bypasses secret scanning and the SCA
+  gate entirely - in a repo whose own secret-hygiene section calls
+  "credentials never committed" an absolute rule precisely because the repo is
+  public with no private fallback. The protection people were relying on to
+  make that rule enforceable was not running.
+- **Fix (2026-07-28)**: `bypass_actors` set to `[]` in the authoritative file
+  and applied to the live ruleset. Break-glass is still possible - an admin
+  can edit or disable the ruleset - but that is a recorded configuration
+  change with a timestamp and an actor, rather than an invisible per-push
+  exemption that leaves no trace distinguishing "reviewed and merged" from
+  "pushed around the rules". `CLAUDE.md` now states the constraint explicitly
+  so the bypass is not quietly reintroduced to make an urgent merge easier.
+- **Org-wide exposure, reported not silently fixed**: the same
+  `RepositoryRole 5 / always` bypass is present on `vxture-platform`,
+  `vxture-karda`, `vxture-arda` and `vxture-template`. Those are outside this
+  repo's write-scope, so they are reported to the platform line rather than
+  changed unilaterally - but until each is fixed, none of those repos' branch
+  protection is actually enforced either, and the reference
+  `main-ruleset.json` those repos were bootstrapped from carries the defect,
+  so any new repo inherits it.
