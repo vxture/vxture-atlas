@@ -34,7 +34,11 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
     },
     version: "1.0.0",
     deprecated: false,
-    metering: { metric: "atlas.chat", mode: "per_call" },
+    // TD-017 part 2: chat bills by realized tokens, not by call - a 100k-token
+    // completion and a 100-token one are not the same unit of consumption.
+    // This is what the C3 consume call actually sends as `amount`; the two
+    // must not drift apart.
+    metering: { metric: "atlas.chat", mode: "per_unit" },
   },
   {
     name: "atlas.embed",

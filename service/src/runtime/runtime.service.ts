@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { ProviderHttpError } from "../providers/base.provider";
 import { MeteringService } from "../metering/metering.service";
 import { RequestLogService } from "../reqlog/request-log.service";
+import { PlatformEntitlementClient } from "../platform/platform-entitlement.client";
 import type { S2sAuthContext } from "./guards/s2s-auth.guard";
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { ModelRouterService } from "../router/model-router.service";
@@ -45,6 +46,8 @@ export class ModelRuntimeService {
     private readonly providerKeys: ProviderKeyService,
     @Inject(RequestLogService)
     private readonly requestLog: RequestLogService,
+    @Inject(PlatformEntitlementClient)
+    private readonly entitlements: PlatformEntitlementClient,
   ) {}
 
   private readonly resolveManagedKey = (
@@ -776,9 +779,22 @@ export class ModelRuntimeService {
   ): Promise<void> {
     const applicationScope = resolveApplicationScope(request);
 
-    // TD-017: Atlas's own per-request history. Independent of `metering.record`
-    // below, which is still the no-op consume path (TD-002) - this one really
-    // persists, so a served request stops being invisible.
+    // TD-017 part 2: C3 consume is the platform's sole write path into the
+    // metering kernel. Called after the fact because the amount is the
+    // realized token count; gating already happened on the C2 read.
+    // `billed` false => served but not billed, which is the reconciliation
+    // signal (billed_amount IS NULL) described in
+    // docs/30-design/210-usage-metering-and-history.md.
+    const billed = auth?.workspaceId
+      ? await this.entitlements.consume({
+          workspaceId: auth.workspaceId,
+          metric: "atlas.chat",
+          amount: usage.totalTokens,
+          idempotencyKey: requestId,
+        })
+      : false;
+
+    // TD-017 part 1: Atlas's own per-request history.
     await this.requestLog.record({
       requestId,
       status: "success",
@@ -804,6 +820,9 @@ export class ModelRuntimeService {
         : {}),
       ...(request.businessId !== undefined
         ? { businessId: request.businessId }
+        : {}),
+      ...(billed
+        ? { billedMetricKey: "atlas.chat", billedAmount: usage.totalTokens }
         : {}),
     });
 

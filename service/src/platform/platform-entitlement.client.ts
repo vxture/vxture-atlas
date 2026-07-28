@@ -109,6 +109,75 @@ export class PlatformEntitlementClient {
     }
   }
 
+  /**
+   * TD-017 part 2 - C3 consume, the platform's **sole** write path into the
+   * metering kernel (`data_commerce_200_metering.md` §11: products must not
+   * write the usage tables directly).
+   *
+   * Called after the work is done, because the amount is the realized token
+   * count. Gating already happened on the C2 read, which is cheap and cached;
+   * this call is the accounting write.
+   *
+   * Returns `false` for every failure mode - including a `409 gated`
+   * (quota exhausted). Refusing to serve a response we have *already produced*
+   * would waste the upstream spend without recovering anything; the honest
+   * record is that it ran and was not billed, which reconciliation can see.
+   *
+   * Never throws: an accounting failure must not turn a served inference into
+   * an error for the caller.
+   */
+  async consume(input: {
+    workspaceId: string;
+    metric: string;
+    amount: number;
+    idempotencyKey: string;
+  }): Promise<boolean> {
+    const base = this.baseUrl;
+    const token = this.token;
+    if (!base || !token) return false;
+    if (!Number.isFinite(input.amount) || input.amount <= 0) return false;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    try {
+      const response = await fetch(
+        `${base.replace(/\/+$/, "")}/usage/consume`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-vxture-internal-auth": token,
+          },
+          body: JSON.stringify({
+            workspace_id: input.workspaceId,
+            product: PRODUCT_CODE,
+            metric: input.metric,
+            amount: Math.trunc(input.amount),
+            // Stable per request, so a retry cannot double-charge - the
+            // platform's usage_idempotencies table is keyed on this.
+            idempotency_key: input.idempotencyKey,
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        this.logger.warn(
+          `C3 consume returned ${response.status} for workspace=${input.workspaceId} metric=${input.metric} - request served, not billed`,
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `C3 consume failed (${error instanceof Error ? error.message : String(error)}) - request served, not billed`,
+      );
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private degraded(reason: string): EntitlementOutcome {
     this.logger.warn(`C2 entitlement read failed (${reason}) - degrading`);
     return { kind: "unreachable", reason };
