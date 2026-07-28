@@ -537,29 +537,21 @@ export class ModelRegistryRepository {
   }
 
   /**
-   * Resolve the active quota for a tenant.
+   * Bulk quota listing for the operator surface (`/capability/quotas`).
    *
-   * FAIL-OPEN (TD-002/TD-005, 2026-07-24): a real answer requires the C2 entitlement
-   * read (`quota_pools`/balance API, product_200_integration.md §3.1), which in turn
-   * requires the platform's tenant/application/agent → workspace/product/metric
-   * scope-key reconciliation (data_model_200_schema.md §2). That reconciliation depends
-   * on `product.agent_catalog`, which has not landed on the platform side yet - not
-   * something this repo can build around. Until then this always reports "no quota
-   * resolvable"; callers (QuotaService.assertAllowed) treat that as bounded fail-open
-   * per the platform's own documented doctrine (data_model_200_schema.md §3: "同步 +
-   * 有界本地 fail-open + 异步对账"), not as a denial and not as a crash - this used to
-   * call a Prisma delegate (`tenantSubscriptionQuota`) with no real backing model,
-   * which threw at runtime (see prisma.ts).
+   * Always empty (TD-002/TD-005, 2026-07-28 cleanup): this used to be
+   * documented as a temporary fail-open pending the platform's
+   * `product.agent_catalog` mapping. That framing no longer applies - real
+   * per-workspace quota resolution now exists via C2
+   * (`PlatformEntitlementClient`, TD-016), but C2 only answers "this one
+   * workspace" and the platform exposes no bulk/list entitlements endpoint
+   * (checked directly against `platform-entitlements.router.ts`: a single
+   * `GET /platform/entitlements?workspace_id=`, nothing else). There is
+   * currently no way to answer "every tenant's quota" at all, not a
+   * temporary gap - `ModelAdminService.listTenantQuotas` reports this
+   * honestly as 501 rather than serving this empty array as if it meant "no
+   * tenant has a quota".
    */
-  findCurrentSubscriptionQuota(
-    _tenantId: string,
-    _at: Date,
-    _subscriptionId?: string,
-  ): Promise<TenantSubscriptionQuotaRecord | null> {
-    return Promise.resolve(null);
-  }
-
-  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
   listSubscriptionQuotas(_filters: {
     tenantId?: string;
     includeExpired?: boolean;
@@ -567,18 +559,6 @@ export class ModelRegistryRepository {
     return Promise.resolve([]);
   }
 
-  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
-  findUsageSummary(_input: {
-    tenantId: string;
-    agentId: string;
-    featureId: string;
-    cycleMonth: string;
-    statType: string;
-  }): Promise<TenantUsageSummaryRecord | null> {
-    return Promise.resolve(null);
-  }
-
-  /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
   /**
    * Tenant self-service usage, aggregated from Atlas's own request log.
    *

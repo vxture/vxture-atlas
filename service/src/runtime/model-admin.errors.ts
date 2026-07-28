@@ -24,7 +24,8 @@ export type ModelAdminErrorCode =
   | "MODEL_ADMIN_GRANT_NOT_FOUND"
   | "MODEL_ADMIN_POLICY_NOT_FOUND"
   | "MODEL_ADMIN_PRICE_RULE_NOT_FOUND"
-  | "MODEL_ADMIN_SCOPE_INVALID";
+  | "MODEL_ADMIN_SCOPE_INVALID"
+  | "MODEL_ADMIN_NOT_IMPLEMENTED";
 
 export interface ModelAdminErrorResponse {
   code: ModelAdminErrorCode;

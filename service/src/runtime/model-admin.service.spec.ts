@@ -14,7 +14,6 @@ import type {
 import type { ModelRegistryRepository } from "../registry/model-registry.repository";
 import type {
   AiModelRecord,
-  TenantSubscriptionQuotaRecord,
   TenantUsageSummaryRecord,
 } from "../types/runtime.types";
 
@@ -557,21 +556,17 @@ describe("normalizeCreatePolicy", () => {
 // ── P3.3 quota / usage read contracts ────────────────────────────────────────
 
 describe("quota and usage read contracts", () => {
-  it("maps tenant quota bigint fields to strings", async () => {
-    const repository = {
-      listSubscriptionQuotas: async () => [makeQuota()],
-    } as Pick<
-      ModelRegistryRepository,
-      "listSubscriptionQuotas"
-    > as ModelRegistryRepository;
-    const service = new ModelAdminService(repository);
+  it("reports bulk quota listing as not implemented (TD-002/TD-005)", () => {
+    // The platform exposes only a single-workspace C2 read, no bulk/list
+    // endpoint - returning [] here would read as "no tenant has a quota",
+    // which is false, so this is an explicit 501 instead.
+    const service = new ModelAdminService({} as ModelRegistryRepository);
 
-    const [quota] = await service.listTenantQuotas({
-      tenantId: "00000000-0000-4000-a000-000000000200",
-    });
-
-    expect(quota?.periodTokens).toBe("1000000");
-    expect(quota?.allowedModels).toEqual(["test-model"]);
+    expect(() =>
+      service.listTenantQuotas({
+        tenantId: "00000000-0000-4000-a000-000000000200",
+      }),
+    ).toThrow(ModelAdminException);
   });
 
   it("maps usage summary bigint fields to strings", async () => {
@@ -641,27 +636,7 @@ function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
   };
 }
 
-function makeQuota(
-  overrides: Partial<TenantSubscriptionQuotaRecord> = {},
-): TenantSubscriptionQuotaRecord {
-  return {
-    id: "00000000-0000-4000-a000-000000000400",
-    tenantId: "00000000-0000-4000-a000-000000000200",
-    subscriptionId: null,
-    maxUsers: 10,
-    maxApiKeys: 5,
-    maxWorkflows: 20,
-    maxConcurrent: 5,
-    rateLimitPerMinute: 60,
-    periodTokens: 1000000n,
-    quotaCycle: "monthly",
-    allowedModels: ["test-model"],
-    allowCustomModel: false,
-    effectiveAt: new Date("2026-06-01T00:00:00.000Z"),
-    expiresAt: null,
-    ...overrides,
-  };
-}
+
 
 function makeUsageSummary(
   overrides: Partial<TenantUsageSummaryRecord> = {},

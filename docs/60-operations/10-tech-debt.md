@@ -16,10 +16,10 @@ repo-split plan itself - not discovered later.
 | ID | Title | Opened | Status |
 |----|-------|--------|--------|
 | TD-001 | Deploy host unassigned; beta tier dormant | 2026-07-24 | partially closed 2026-07-24 - host owner-confirmed (worker-02); real deploys succeeded 2026-07-27, platform infra-allocation-registry backfilled; beta tier still dormant |
-| TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | open - blocked on platform `product.agent_catalog` (see TD-005 progress note), not just C3 consume wiring |
+| TD-002 | Usage-metering write path is a no-op, inherited from the in-monorepo implementation | 2026-07-24 | closed 2026-07-28 - superseded by TD-017 parts 1/2, which is exactly this: Atlas now writes its own `reqlog` and reports realized consumption to the platform via C3 consume |
 | TD-003 | S2S provider surface (embedding/parse/rerank) not designed; karda has submitted field-level requirements as design input | 2026-07-24 | contract layer landed 2026-07-24 (`POST /v1/embed`\|`/v1/rerank`\|`/v1/parse`, S2sAuthGuard, model/quota gating, G1 error envelope); real provider integration still open (product/cost decision) - A2.3 (parse deployment affinity) resolved 2026-07-27 (same host, worker-02, see progress note); A3.3 (rerank latency) still needs real benchmarking - blocked on a real provider, not actionable yet; new platform governance checklist (product_210 §11) to self-check future changes against, see progress note |
 | TD-004 | BFF-to-service auth is currently unauthenticated (plain fetch, diagnostics-only guard) | 2026-07-24 | partially closed 2026-07-24 - Atlas-side S2S token verification (callee half) landed; platform-side token-exchange issuance + BFF/varda client wiring (caller half) still open |
-| TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | crash risk closed 2026-07-24 (ghost delegates removed, fail-open in place); real C2/C3 wiring still blocked on platform `product.agent_catalog` |
+| TD-005 | `quota.service.ts`/`metering.service.ts`/`model-registry.repository.ts` reference Prisma models removed from `prisma/schema.prisma` during the physical DB split | 2026-07-24 | closed 2026-07-28 - crash risk closed 2026-07-24; real per-workspace quota wiring landed via TD-016 (C2); the remaining dead code (a second, unreachable quota-and-model-allowlist path) removed outright rather than "finished" - see progress note for why it could never be finished |
 | TD-006 | Provider API keys resolved only via `apiKeyEnvVar` (env var) - onboarding or rotating a provider key requires a redeploy | 2026-07-26 | closed 2026-07-26 (envelope-encrypted provider-key vault, `key.provider_api_keys`, no redeploy for add/rotate); the originally-planned Phase B (external KMS/Vault for the master key) was evaluated and dropped - no org-wide KMS/Vault exists anywhere today, see progress note |
 | TD-007 | Provider-key vault (`capability/provider-keys*`, renamed 2026-07-28 from `model-platform/admin/provider-keys*` - see TD-013) has no admin/console UI or BFF coverage in vxture-platform, unlike every other model-platform resource | 2026-07-26 | open - not this repo's write-scope; handoff letter sent, see progress note |
 | TD-008 | Atlas has no `GET /.well-known/vxture-tools` capability-discovery endpoint, now required by product_210 §11 item 6 for any L1 provider shipping tool descriptors | 2026-07-27 | closed 2026-07-27 - `GET /.well-known/vxture-tools` implemented (`service/src/discovery/`), `S2sAuthGuard`-protected, registers all four `atlas.*` descriptors at `version: "1.0.0"` |
@@ -1037,3 +1037,52 @@ repo-split plan itself - not discovered later.
 - **A1/A3 not wired**: Zhipu reports no token counts for embedding/rerank, so
   there is no realized amount to consume. Deferred rather than billing a
   fabricated number.
+
+### TD-002/TD-005 - progress note (2026-07-28, both closed)
+
+- **TD-002 was already done, just not recorded**: its title ("usage-metering
+  write path is a no-op") is literally what TD-017 fixed. Recording the
+  closure here rather than leaving two open entries pointing at one already-
+  finished piece of work.
+- **TD-005's remaining piece turned out to be dead code, not unfinished
+  code.** `QuotaService` used to carry a second quota system alongside the
+  new C2 pool check (TD-016): `findCurrentSubscriptionQuota` /
+  `findUsageSummary` fed a `checkCommerceQuota`/`isModelAllowed` path
+  enforcing a per-subscription token budget and a model allowlist
+  (`TenantSubscriptionQuotaRecord.allowedModels`/`allowCustomModel`). Both
+  repository methods were stubs left over from the physical DB split that
+  always returned null (their backing tables never existed in Atlas's own
+  database - they were cross-database reads into commerce tables the
+  platform owns) - so this entire path was unreachable on every single call
+  and always fell through to fail-open, silently, since the day it was
+  written.
+- **It was not fixable, not just unfixed**: `allowedModels`/`allowCustomModel`
+  models a v1 "capabilities" concept the platform's own
+  `entitlement-view.ts` says is retired ("union/tiered strategy keys ... no
+  longer leave the platform - tier→feature mapping lives in each product's
+  own versioned capability matrix"). There is no data left on the platform
+  side that could ever populate it. Kept as "open, blocked" it would have
+  stayed open forever with no path to closing it as originally scoped.
+  Removed instead, with the reasoning kept in `quota.service.ts`'s doc
+  comment so a future reader doesn't wonder why model-allowlist enforcement
+  is missing.
+- **One real operator-facing bug found and fixed alongside**:
+  `/capability/quotas` (`ModelAdminService.listTenantQuotas`) read from the
+  exact same dead stub and had been silently returning `[]` to every
+  operator query - indistinguishable from "no tenant has a quota" when the
+  true answer was "this was never wired". Checked directly against
+  `platform-entitlements.router.ts`: the platform exposes only
+  `GET /platform/entitlements?workspace_id=` (single workspace), no bulk/list
+  endpoint, so there is no way to answer "every tenant's quota" today - not a
+  gap Atlas can close unilaterally. Changed to an explicit `501
+  MODEL_ADMIN_NOT_IMPLEMENTED` (owner decision 2026-07-28: honest failure
+  over a silently-empty success) rather than leaving the misleading `[]`.
+  `listSubscriptionQuotas`/`listUsageSummaries` stay as documented
+  permanently-empty stubs - both answer "every tenant", which has no
+  possible backing from either side.
+- **Net simplification**: `QuotaService.assertAllowed` is now grant check +
+  C2 pool check, full stop - down from four repository calls and a private
+  model-allowlist method, all but two of which could never execute. `void`
+  return (nothing ever read the old `QuotaContext`/`remaining` output).
+  `QuotaCheckResult`/`TenantSubscriptionQuotaRecord`'s two dead consumers and
+  one dead mapper function removed with it.
