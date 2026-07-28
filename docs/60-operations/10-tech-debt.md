@@ -211,6 +211,16 @@ repo-split plan itself - not discovered later.
 - **Tracked**: `vxture-atlas`#40 (kept open, blocked) and
   `vxture-platform`#144 (liaison, opened 2026-07-27 to get the coordinated
   `model-runtime-client` update tracked before this is revisited).
+- **Progress (2026-07-28) - additive `/v1/chat` alias landed**: the
+  "coordinated, additive migration" this entry called for started -
+  `ModelRuntimeController` now registers under both `["model-platform", "v1"]`
+  (Nest's native multi-prefix `@Controller` support, zero route duplication),
+  so `/v1/chat`/`/v1/models` work identically to the legacy path. The legacy
+  path is untouched - `model-runtime-client` still hardcodes it and keeps
+  working unchanged. New consumers (karda) should prefer `/v1/*` for
+  consistency with A1-A3. `#40` stays open until `model-runtime-client` is
+  actually migrated and the legacy path has a real deprecation timeline -
+  this only closes the "can a new consumer use a consistent path today" gap.
 
 ## TD-003b - tenant-filtered model list + task-profile routing (2026-07-27, deployed and confirmed live)
 
