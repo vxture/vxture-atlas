@@ -2,7 +2,7 @@
  * status-page.ts - human-readable HTML rendering of ModelPlatformReadyResponse.
  * Atlas has no portals/ (services profile) - karda/arda's /status is a Next.js
  * portal page; this is the equivalent for a backend-only service: render the
- * same data /model-platform/health/ready already computes, as HTML instead of
+ * same data /readyz already computes, as HTML instead of
  * JSON, served directly by this NestJS app. No new data source, no new checks.
  */
 import type { HealthCheckResult, ModelPlatformReadyResponse } from "./health.service";

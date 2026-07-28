@@ -118,7 +118,7 @@ cd /srv/md0/atlas && docker compose restart app    # env_file is read at contain
 ```
 
 TD-006's managed vault (`key.provider_api_keys`, envelope-encrypted,
-configured via `model-platform/admin/provider-keys*`) is the target state
+configured via `capability/provider-keys*`) is the target state
 and needs neither this file nor the main `.env` at all - this file only
 matters for models still on the legacy `config.apiKeyEnvVar` path.
 
