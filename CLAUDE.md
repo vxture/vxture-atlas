@@ -40,15 +40,31 @@ Unlike an "app profile" product (arda/karda/terra), Atlas does **not** get:
   asset-face product in the sharing-grant sense).
 - An `agent-server/` slot.
 
-What it DOES carry: the full governance base, OIDC RP five endpoints (present
-but currently unused - Atlas has no end-user browser surface; the operator
-UI lives in `vxture-platform`'s admin/console portals, calling Atlas over the
-network), C2 entitlement client, C3 provisioning webhook, **C3 consume as the
-sole inference-metering entry point for every other vxture product** (karda,
-arda, varda, etc. token usage all flows through Atlas's consume path, not
-their own), and the S2S surface both as a provider (embedding/parse/rerank/
-generation endpoints for other products to call) and as a caller (outbound to
-upstream model providers - Doubao/Claude/OpenAI/private).
+What it DOES carry - as an **obligation**, which is not the same as "is
+implemented"; the 2026-07-28 audit found this list had drifted into claiming
+things that do not exist in code, so each item is now marked:
+
+- the full governance base - implemented
+- C3 provisioning webhook - implemented (signature verify, idempotency,
+  replay rejection, real persistence)
+- the S2S surface as a **caller** (outbound to Doubao/Claude/Zhipu/private) -
+  implemented
+- the S2S surface as a **provider**: `/v1/chat` + `/v1/models` implemented;
+  `/v1/embed` + `/v1/rerank` implemented via Zhipu only (any other provider
+  returns 501); **`/v1/parse` has no provider at all** and always 501s
+  (TD-003, TD-019)
+- **C3 consume as the sole inference-metering entry point for every other
+  vxture product** (karda/arda/varda token usage all flows through Atlas, not
+  their own) - **designated but NOT implemented**: nothing is written to the
+  platform's metering kernel or to Atlas's own `reqlog` tables. This is the
+  single largest gap in the repo (TD-017); boundary design in
+  `docs/30-design/210-usage-metering-and-history.md`
+- C2 entitlement client - **not implemented**; `PLATFORM_API_URL` is declared
+  but read by no code, so the quota gate fail-opens permanently (TD-016)
+- OIDC RP five endpoints - **not implemented**; no controller exists. Atlas
+  has no end-user browser surface, and the operator UI lives in
+  `vxture-platform`'s portals calling Atlas over the network, so this has
+  never been needed - but do not read the inherited obligation as done code
 
 ## Name cascade (product code `atlas`)
 
