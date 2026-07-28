@@ -152,3 +152,27 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
 ];
 
 export const VXTURE_TOOLS_PROTOCOL_VERSION = "1.0";
+
+/**
+ * TD-019: a descriptor may only be published once a provider actually serves
+ * it. `atlas.parse` is defined above (the contract is real and karda has
+ * field-level requirements against it) but no provider implements
+ * `parseDocument` - `BaseProvider`'s default throws, so every call is a
+ * `501 MODEL_NOT_IMPLEMENTED`. Publishing it with `deprecated: false`, which
+ * is formally identical to the three capabilities we really serve, tells a
+ * consumer doing product_210 §11 discovery that parse is available. Withhold
+ * it instead: a consumer that cannot see the capability asks, which beats one
+ * that sees it and eats a 501.
+ *
+ * `deprecated: true` would be the wrong signal (that means retiring, not
+ * not-yet-built) - the descriptor shape simply cannot express maturity, which
+ * is the gap raised as TD-015 / vxture-platform#159. Once a parse provider
+ * lands (vxture-atlas#38), delete this set.
+ */
+const UNIMPLEMENTED_TOOL_NAMES: ReadonlySet<string> = new Set(["atlas.parse"]);
+
+/** The subset actually served, i.e. what `.well-known/vxture-tools` returns. */
+export const PUBLISHED_TOOL_DESCRIPTORS: ToolDescriptor[] =
+  ATLAS_TOOL_DESCRIPTORS.filter(
+    (descriptor) => !UNIMPLEMENTED_TOOL_NAMES.has(descriptor.name),
+  );

@@ -31,6 +31,11 @@ repo-split plan itself - not discovered later.
 | TD-014 | Build provenance never reached the image: `build.yml` passed `APP_VERSION`/`GIT_SHA`/`BUILD_TIME`/`DEPLOY_STAGE` as build-args but `service/Dockerfile` declared no matching `ARG`, so Docker silently dropped all four and production `/healthz` reported `version:"dev"`, `gitSha:"unknown"`, `stage:"dev"` - violating standard 025 §4/§6/§7, the exact failure mode that standard exists to prevent | 2026-07-28 | closed 2026-07-28 - four `ARG`+`ENV` added to the runtime stage with honest defaults; found by self-review, after the v0.1.9 deploy verification had to fall back to `docker ps` image tags because the health endpoint could not say which build was live |
 | TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
 
+| TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | open - CLAUDE.md corrected to stop asserting it exists; the client itself is unbuilt |
+| TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | open - restates TD-002 at its true scope; boundary already designed both sides (`docs/30-design/210-usage-metering-and-history.md`), only the writing code is missing |
+| TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | open - dormant while TD-017 keeps the tables empty; becomes a live clock the moment usage writing lands |
+| TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
+
 ## TD-001 - deploy host unassigned; beta tier dormant
 
 - **Clause not yet met**: `140-repo-governance-standard.md` section 4 - product
@@ -728,3 +733,111 @@ repo-split plan itself - not discovered later.
   evolution rule); Atlas then mirrors it in `discovery.types.ts` +
   `tool-descriptors.ts`, which is a small additive change here.
 - **Report to platform line**: proposal filed as `vxture-platform`#159, with the TD-013 path retirement as the motivating evidence.
+
+## TD-016 - C2 entitlement client does not exist
+
+- **What the docs claim**: `CLAUDE.md` lists "C2 entitlement client" among
+  what Atlas *does* carry from the governance base, and `.env.example`
+  declares `PLATFORM_API_URL` with a note about the S2S egress guard.
+- **What is actually true**: `PLATFORM_API_URL` is read by **zero lines** of
+  `service/src`. There is no entitlement client, no C2 call, no resolver -
+  mock or otherwise. The claim is not "implemented but unwired", it is
+  absent.
+- **Why it matters beyond tidiness**: TD-005's fail-open depends on "the real
+  quota source cannot be resolved *yet*". With no C2 client there is no
+  mechanism by which it ever could resolve, so the fail-open is not a
+  temporary bounded degradation - it is the permanent steady state, and the
+  quota gate is decorative. Reading the code, this is easy to mistake for a
+  wiring gap; it is a missing component.
+- **Recovery condition**: an entitlement client that reads `PLATFORM_API_URL`
+  and resolves workspace entitlements over the tailnet S2S surface, feeding
+  `QuotaService` a real quota source so the fail-open branch stops being the
+  only reachable one.
+- **Correction shipped with this entry**: `CLAUDE.md`'s inherited-capability
+  line corrected from asserting the client exists to naming it as pending,
+  so the repo's own governance summary stops being wrong.
+
+## TD-017 - Atlas records no usage anywhere (the metering entry point is empty)
+
+- **Relationship to TD-002**: TD-002 recorded this as "usage-metering write
+  path is a no-op, inherited from the in-monorepo implementation" and framed
+  it as blocked on the platform's `product.agent_catalog`. That framing
+  understates it, so this entry restates the actual scope.
+- **What is actually true** (verified 2026-07-28 by reading the write path
+  end to end): `MeteringService.record()` -> `recordUsage()` logs a warning
+  and returns `null`. `upsertUsageSummary()` returns an in-memory projection
+  and persists nothing (its own comment says so). No `POST /usage/consume`
+  client exists, so nothing reaches the platform's metering kernel either.
+  `reqlog.request_records` - Atlas's own detailed-history table, which is
+  deployed, partitioned, and modelled in Prisma with a generated delegate -
+  is written by no application code.
+- **Why this is more than a missing feature**: `CLAUDE.md` designates Atlas
+  "the sole inference-metering entry point for every other vxture product" -
+  karda/arda/varda token usage all flows through Atlas's consume path. Every
+  real generation served to date (karda's live integration, `vxture-atlas`#47)
+  is therefore unrecorded on both sides. There is no data to backfill from:
+  the events were never captured.
+- **Boundary is not the blocker**: the platform/Atlas split is already
+  designed and both sides already have physical tables - see
+  `docs/30-design/210-usage-metering-and-history.md`. What is missing is the
+  writing code on Atlas's side (its own `reqlog` insert) and the consume
+  client (the platform's half).
+- **Recovery condition**: (1) write `reqlog.request_records` +
+  `reqlog.error_records` on every A1-A4 call - this half depends on nothing
+  external and can land immediately; (2) call the platform's
+  `POST /usage/consume` with `{workspace, product, metric, amount,
+  idempotency_key, request_id}` and echo the returned event id back into
+  `usage_event_id`. Step 1 is independently valuable: it makes the gap
+  measurable and gives reconciliation a left-hand side.
+
+## TD-018 - reqlog partitions run out 2027-01, then retention silently breaks
+
+- **What is wrong**: `00_baseline.sql` pre-builds monthly partitions for
+  `reqlog.request_records` / `reqlog.error_records` from 2026-07 for seven
+  months (`FOR i IN 0..6`), i.e. **through 2027-01**, plus a `DEFAULT`
+  catch-all. Its own comment states a maintenance job "should roll this
+  forward (create month-after-next, detach+drop expired partitions) once
+  deployed" - no such job exists.
+- **Failure mode**: nothing breaks loudly. From 2027-02 every write lands in
+  the DEFAULT partition and keeps working, so there is no error to notice.
+  But drop-based retention - the entire reason the tables are partitioned -
+  stops being possible, because expired rows are no longer isolated in a
+  droppable child. The longer it runs undetected the more expensive the
+  eventual repartition.
+- **Why it is not urgent yet but must not be forgotten**: today nothing
+  writes these tables at all (TD-017), so the DEFAULT partition stays empty.
+  The moment TD-017 is fixed, this becomes a live clock.
+- **Recovery condition**: a scheduled job (pg_cron on the Atlas database, or
+  an external scheduler alongside the existing deploy tooling) that creates
+  the month-after-next partition and detaches/drops partitions past the
+  retention window - plus an agreed Atlas-side retention period, which
+  `docs/30-design/210-usage-metering-and-history.md` §6 flags as still
+  undecided.
+
+## TD-019 - capability discovery advertises `atlas.parse` as available when no provider implements it
+
+- **What is wrong**: `.well-known/vxture-tools` publishes `atlas.parse` with
+  `deprecated: false` and a full `metering` declaration, formally
+  indistinguishable from `atlas.chat`/`embed`/`rerank`, which are really
+  served. **No provider overrides `parseDocument`** - `BaseProvider`'s
+  default throws, so every parse call returns `501 MODEL_NOT_IMPLEMENTED`.
+- **Why it is a contract problem, not just a missing feature**: TD-003
+  already records "no real parse provider" as an implementation gap. This
+  entry is about the *advertisement*: product_210 §11 item 6 makes discovery
+  the mechanism consumers use to learn what is available instead of asking.
+  A consumer doing exactly that (karda has A2 requirements pending) is told
+  parse is available and finds out otherwise by 501. Atlas is publishing a
+  capability claim it does not honour.
+- **Why the protocol cannot express the truth today**: `ToolDescriptor` has
+  `deprecated` (retiring) but nothing for "defined, not yet implemented".
+  Marking parse `deprecated: true` would be a lie of a different shape.
+  This is the same descriptor-expressiveness gap as TD-015 - the shape
+  cannot describe a capability's real maturity.
+- **Interim fix shipped with this entry**: `atlas.parse` is withheld from
+  the published manifest until a provider implements it - a consumer that
+  cannot see it will ask, which is strictly better than one that sees it and
+  gets a 501. The descriptor stays in source, feature-gated, so restoring it
+  is a one-line change when A2 lands.
+- **Recovery condition**: a real parse provider (tracked `vxture-atlas`#38),
+  or a maturity field on the descriptor (tracked `vxture-platform`#159) that
+  lets Atlas advertise it honestly as not-yet-implemented.

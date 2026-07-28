@@ -2,7 +2,7 @@ import { Controller, Get, UseGuards } from "@nestjs/common";
 
 import { S2sAuthGuard } from "../runtime/guards/s2s-auth.guard";
 import {
-  ATLAS_TOOL_DESCRIPTORS,
+  PUBLISHED_TOOL_DESCRIPTORS,
   VXTURE_TOOLS_PROTOCOL_VERSION,
 } from "./tool-descriptors";
 import type { VxtureToolsResponse } from "./discovery.types";
@@ -15,7 +15,7 @@ export class DiscoveryController {
   list(): VxtureToolsResponse {
     return {
       protocol_version: VXTURE_TOOLS_PROTOCOL_VERSION,
-      tools: ATLAS_TOOL_DESCRIPTORS,
+      tools: PUBLISHED_TOOL_DESCRIPTORS,
     };
   }
 }
