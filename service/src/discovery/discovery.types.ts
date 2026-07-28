@@ -3,6 +3,17 @@ export interface ToolDescriptor {
   name: string;
   title: string;
   description: string;
+  /**
+   * product_210 §4.1a (2026-07-28, platform#173 - the fix for TD-015):
+   * where to actually call this tool. `path` is relative to Atlas's own base
+   * URL, which a consumer already has from its own config/registry - it must
+   * never become a second place a hostname lives.
+   *
+   * This is what let TD-013's path retirement have gone undetected by
+   * discovery: the manifest was byte-identical before and after, so a
+   * consumer polling it learned nothing until the next real call 404'd.
+   */
+  endpoint: { method: "GET" | "POST" | "PUT" | "DELETE"; path: string };
   input_schema: Record<string, unknown>;
   output_schema?: Record<string, unknown>;
   version: string;

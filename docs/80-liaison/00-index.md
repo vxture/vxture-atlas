@@ -37,21 +37,24 @@ issue state is the source of truth, not this row.
 | [#40](https://github.com/vxture/vxture-atlas/issues/40) | atlas | `/model-platform/chat` -> `/v1/chat` rename | Closed 2026-07-28 - superseded by #60/TD-013 (legacy path retired outright, not just aliased) |
 | [#52](https://github.com/vxture/vxture-atlas/issues/52) | atlas | M-1 operator-token verification on admin routes (mgmt-plane contract batch B) | Open - platform half landed, atlas half not started |
 | [#60](https://github.com/vxture/vxture-atlas/pull/60) | atlas | `model-platform` route-prefix cleanup (TD-013): admin -> `/capability`, health dedup | Merged |
-| [#61](https://github.com/vxture/vxture-atlas/pull/61) | atlas | Retire all legacy `model-platform/*` paths outright (no alias) | Open PR - full path map `docs/20-specs/10-http-surface.md`; breaks 3 known `vxture-platform` callers until updated, see `platform`#156 |
+| [#61](https://github.com/vxture/vxture-atlas/pull/61) | atlas | Retire all legacy `model-platform/*` paths outright (no alias) | Merged - full path map `docs/20-specs/10-http-surface.md` |
 | [#41](https://github.com/vxture/vxture-atlas/issues/41) | atlas | Tenant-scoped model list | Closed - shipped, deployed, confirmed live |
 | [#42](https://github.com/vxture/vxture-atlas/issues/42) | atlas | taskProfile routing | Closed - shipped, deployed, confirmed live |
 | [#43](https://github.com/vxture/vxture-atlas/issues/43) | atlas | Capability discovery endpoint | Closed - shipped (TD-008) |
 | [#47](https://github.com/vxture/vxture-atlas/issues/47) | atlas | karda's real end-to-end integration test | Closed - full chain proven live (TD-010/011/012) |
-| [#144](https://github.com/vxture/vxture-platform/issues/144) | platform | `model-runtime-client` coordination for #40 | Open - now urgent, see #156 |
+| [#144](https://github.com/vxture/vxture-platform/issues/144) | platform | `model-runtime-client` coordination for #40 | Closed - `client.ts` migrated to `/v1/chat`, verified |
 | [#145](https://github.com/vxture/vxture-platform/issues/145) | platform | Confirm Atlas production registration | Closed |
 | [#147](https://github.com/vxture/vxture-platform/issues/147) | platform | (karda-side coverage gap, closed by karda) | Closed |
 | [#148](https://github.com/vxture/vxture-platform/issues/148) | platform | Atlas admin-UI gaps + admin-surface architecture discussion | Open - `product_250_management-plane-contract.md` v0.1 draft in review, Batch A/B not yet landed |
 | [#152](https://github.com/vxture/vxture-platform/issues/152) | platform | `modelCode` provider-prefix breaks real upstream calls | Open - options laid out, not yet decided |
-| [#156](https://github.com/vxture/vxture-platform/issues/156) | platform | Actionable checklist: update model-runtime-client/admin-bff/console-bff to `/v1`\|`/capability` before next Atlas deploy | Open - urgent |
-| [#159](https://github.com/vxture/vxture-platform/issues/159) | platform | product_210 §4.1 `ToolDescriptor` has no endpoint/path field - discovery can't announce a path change (TD-015) | Open - proposal, awaiting platform decision |
+| [#156](https://github.com/vxture/vxture-platform/issues/156) | platform | Actionable checklist: update model-runtime-client/admin-bff/console-bff to `/v1`\|`/capability` before next Atlas deploy | Closed - all three call sites verified migrated |
+| [#159](https://github.com/vxture/vxture-platform/issues/159) | platform | product_210 §4.1 `ToolDescriptor` has no endpoint/path field - discovery can't announce a path change (TD-015) | Closed - shipped as §4.1a (`platform`#173), mirrored into atlas's descriptors |
 | [#164](https://github.com/vxture/vxture-platform/issues/164) | platform | Governance gap: no sanctioned path for recurring DB maintenance (TD-018) | Open - proposal, awaiting platform decision |
-| [#68](https://github.com/vxture/vxture-atlas/issues/68) | atlas | Apply fixed ruleset to live config - admin bypass still active (TD-020) | Open - blocked on a privileged repo-settings call |
-| [#167](https://github.com/vxture/vxture-platform/issues/167) | platform | SECURITY: branch protection advisory org-wide; the reference artifact carries the defect (TD-020) | Open |
+| [#68](https://github.com/vxture/vxture-atlas/issues/68) | atlas | Apply fixed ruleset to live config - admin bypass still active (TD-020) | Closed - verified: admin push to `main` now rejected (`GH013`) |
+| [#167](https://github.com/vxture/vxture-platform/issues/167) | platform | SECURITY: branch protection advisory org-wide; the reference artifact carries the defect (TD-020) | Closed for atlas+platform; karda/arda/template remain, tracked per-repo below |
+| [platform#172](https://github.com/vxture/vxture-platform/issues/172) | platform | Reference ruleset artifact + governance doc fixed to match `bypass_actors: []` (TD-020) | Closed |
+| [platform#173](https://github.com/vxture/vxture-platform/issues/173) | platform | product_210 §4.1a `endpoint` field shipped (TD-015) | Closed |
+| [platform#175](https://github.com/vxture/vxture-platform/issues/175) | platform | console-bff cutover to `/tenancy/*` | Merged - awaiting v0.1.14+ deploy to verify end to end |
 | [karda#82](https://github.com/vxture/vxture-karda/issues/82) | karda | Same admin bypass on karda's ruleset (TD-020) | Open |
 | [arda#187](https://github.com/vxture/vxture-arda/issues/187) | arda | Same admin bypass on arda's ruleset (TD-020) | Open |
 | [template#37](https://github.com/vxture/vxture-template/issues/37) | template | Same admin bypass; every new repo inherits it (TD-020) | Open |
