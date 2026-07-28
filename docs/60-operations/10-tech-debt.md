@@ -641,6 +641,6 @@ repo-split plan itself - not discovered later.
   release until told to - merging to `main` does not deploy (see repo
   branch model).
 - **Report to platform line**: `vxture-platform`#144 (model-runtime-client)
-  and #148 (admin-bff/capconsole-bff sequencing) updated with the full
-  breaking-change list, plus a dedicated `liaison`-tagged issue opened for
-  urgency (see progress note link once filed).
+  and #148 (admin-bff/capconsole-bff sequencing) both commented with the
+  breaking-change list; dedicated actionable issue filed at
+  `vxture-platform`#156.
