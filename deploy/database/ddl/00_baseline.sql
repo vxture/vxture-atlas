@@ -49,7 +49,7 @@ CREATE SCHEMA IF NOT EXISTS provisioning;  -- C3 provisioning webhook receiver s
 --                        not the key itself - allows master-key rotation
 --                        without re-reading plaintext.
 -- provider_code is a cross-database logical reference (no FK, boundary #1).
-CREATE TABLE key.provider_api_keys (
+CREATE TABLE IF NOT EXISTS key.provider_api_keys (
     id                uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_code     varchar(64)   NOT NULL,                     -- cross-db logical ref to model.model_providers.provider_code (no FK)
     key_alias         varchar(128)  NOT NULL,                     -- multi-key rotation / disambiguation
@@ -63,22 +63,22 @@ CREATE TABLE key.provider_api_keys (
     CONSTRAINT uq_provider_api_keys_code_alias UNIQUE (provider_code, key_alias),
     CONSTRAINT chk_provider_api_keys_key_scope CHECK (key_scope IN ('shared','dedicated'))
 );
-CREATE INDEX idx_provider_api_keys_provider_code ON key.provider_api_keys (provider_code);
-CREATE INDEX idx_provider_api_keys_is_active     ON key.provider_api_keys (is_active);
+CREATE INDEX IF NOT EXISTS idx_provider_api_keys_provider_code ON key.provider_api_keys (provider_code);
+CREATE INDEX IF NOT EXISTS idx_provider_api_keys_is_active     ON key.provider_api_keys (is_active);
 
 -- Key-rotation audit (append-only). provider_api_key_id is a domain FK (same
 -- database, real FK). rotated_by is a bare value referencing the platform's
 -- admin.operator_accounts (cross-database/cross-realm, no FK, boundary #1/#2).
 -- Append-only guard in 95_triggers.sql equivalent (see the modelruntime
 -- reference implementation) - UPDATE only; DELETE remains for parent-key purge.
-CREATE TABLE key.key_rotation_logs (
+CREATE TABLE IF NOT EXISTS key.key_rotation_logs (
     id                  uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_api_key_id uuid          NOT NULL REFERENCES key.provider_api_keys(id) ON DELETE CASCADE,
     rotated_by          uuid,                                     -- bare value -> admin.operator_accounts (boundary #1/#2, no FK)
     reason              varchar(512),
     rotated_at          timestamptz   NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_key_rotation_logs_key ON key.key_rotation_logs (provider_api_key_id, rotated_at);
+CREATE INDEX IF NOT EXISTS idx_key_rotation_logs_key ON key.key_rotation_logs (provider_api_key_id, rotated_at);
 
 -- ═══ schema reqlog ═══
 -- High-frequency AI request log (one row per call) + error detail, monthly
@@ -89,7 +89,7 @@ CREATE INDEX idx_key_rotation_logs_key ON key.key_rotation_logs (provider_api_ke
 -- provider_code) are bare values, no FK (boundary #1). Failed calls
 -- (status=error/timeout) land only here - they never trigger consume or write
 -- a usage event on the platform side.
-CREATE TABLE reqlog.request_records (
+CREATE TABLE IF NOT EXISTS reqlog.request_records (
     id                       uuid          NOT NULL DEFAULT gen_random_uuid(),
     request_id               varchar(128)  NOT NULL,             -- cross-db correlation key -> platform metering.usage_events.request_id (no FK)
     tenant_id                uuid,                               -- attribution dimension (cross-db bare value, audit retained)
@@ -118,11 +118,11 @@ CREATE TABLE reqlog.request_records (
     CONSTRAINT chk_request_records_usage_type CHECK (usage_type IS NULL OR usage_type IN ('normal','retry','test')),
     CONSTRAINT chk_request_records_status     CHECK (status IS NULL OR status IN ('success','error','timeout'))
 ) PARTITION BY RANGE (created_at);
-CREATE INDEX idx_request_records_request_id     ON reqlog.request_records (request_id);
-CREATE INDEX idx_request_records_usage_event_id ON reqlog.request_records (usage_event_id);
-CREATE INDEX idx_request_records_tenant_id      ON reqlog.request_records (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_request_records_request_id     ON reqlog.request_records (request_id);
+CREATE INDEX IF NOT EXISTS idx_request_records_usage_event_id ON reqlog.request_records (usage_event_id);
+CREATE INDEX IF NOT EXISTS idx_request_records_tenant_id      ON reqlog.request_records (tenant_id);
 
-CREATE TABLE reqlog.error_records (
+CREATE TABLE IF NOT EXISTS reqlog.error_records (
     id            uuid          NOT NULL DEFAULT gen_random_uuid(),
     request_id    varchar(128),
     provider_code varchar(64),
@@ -132,8 +132,8 @@ CREATE TABLE reqlog.error_records (
     created_at    timestamptz   NOT NULL DEFAULT now(),
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
-CREATE INDEX idx_error_records_request_id ON reqlog.error_records (request_id);
-CREATE INDEX idx_error_records_error_code ON reqlog.error_records (error_code);
+CREATE INDEX IF NOT EXISTS idx_error_records_request_id ON reqlog.error_records (request_id);
+CREATE INDEX IF NOT EXISTS idx_error_records_error_code ON reqlog.error_records (error_code);
 
 -- Pre-built monthly partitions (current + 6 months ahead, starting 2026-07) +
 -- a DEFAULT catch-all so a missed pre-build never silently drops writes. A
@@ -168,7 +168,7 @@ END $$;
 -- Connection config, weighted model->provider routing, and fallback rules.
 -- provider_code / model_code / fallback_model_codes are cross-schema logical
 -- references (no FK; same physical database but deliberately decoupled).
-CREATE TABLE routing.provider_configs (
+CREATE TABLE IF NOT EXISTS routing.provider_configs (
     id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_code varchar(64)   NOT NULL,
     endpoint_url  text          NOT NULL,
@@ -180,10 +180,10 @@ CREATE TABLE routing.provider_configs (
     deleted_at    timestamptz,
     CONSTRAINT uq_provider_configs_provider_code UNIQUE (provider_code)
 );
-CREATE INDEX idx_provider_configs_is_active  ON routing.provider_configs (is_active);
-CREATE INDEX idx_provider_configs_deleted_at ON routing.provider_configs (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_provider_configs_is_active  ON routing.provider_configs (is_active);
+CREATE INDEX IF NOT EXISTS idx_provider_configs_deleted_at ON routing.provider_configs (deleted_at);
 
-CREATE TABLE routing.model_routes (
+CREATE TABLE IF NOT EXISTS routing.model_routes (
     id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     model_code    varchar(128)  NOT NULL,
     provider_code varchar(64)   NOT NULL,
@@ -194,11 +194,11 @@ CREATE TABLE routing.model_routes (
     deleted_at    timestamptz,
     CONSTRAINT uq_model_routes_model_provider UNIQUE (model_code, provider_code)
 );
-CREATE INDEX idx_model_routes_model_code ON routing.model_routes (model_code);
-CREATE INDEX idx_model_routes_is_active  ON routing.model_routes (is_active);
-CREATE INDEX idx_model_routes_deleted_at ON routing.model_routes (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_model_routes_model_code ON routing.model_routes (model_code);
+CREATE INDEX IF NOT EXISTS idx_model_routes_is_active  ON routing.model_routes (is_active);
+CREATE INDEX IF NOT EXISTS idx_model_routes_deleted_at ON routing.model_routes (deleted_at);
 
-CREATE TABLE routing.fallback_rules (
+CREATE TABLE IF NOT EXISTS routing.fallback_rules (
     id                   uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     model_code           varchar(128)  NOT NULL,
     fallback_model_codes text[]        NOT NULL DEFAULT '{}',
@@ -209,9 +209,9 @@ CREATE TABLE routing.fallback_rules (
     deleted_at           timestamptz,
     CONSTRAINT uq_fallback_rules_model_code UNIQUE (model_code)
 );
-CREATE INDEX idx_fallback_rules_model_code ON routing.fallback_rules (model_code);
-CREATE INDEX idx_fallback_rules_is_active  ON routing.fallback_rules (is_active);
-CREATE INDEX idx_fallback_rules_deleted_at ON routing.fallback_rules (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_fallback_rules_model_code ON routing.fallback_rules (model_code);
+CREATE INDEX IF NOT EXISTS idx_fallback_rules_is_active  ON routing.fallback_rules (is_active);
+CREATE INDEX IF NOT EXISTS idx_fallback_rules_deleted_at ON routing.fallback_rules (deleted_at);
 
 -- ═══ schema model ═══
 -- Model governance config (provider/model/grant/price_rule/policy) - Atlas's
@@ -220,7 +220,7 @@ CREATE INDEX idx_fallback_rules_deleted_at ON routing.fallback_rules (deleted_at
 -- tenancy.tenants there; here it is a bare value with NO FK (physical
 -- database separation, boundary #1) - consistency is enforced at the
 -- application layer against the C2/C3 contract payload, not by the DB.
-CREATE TABLE model.model_providers (
+CREATE TABLE IF NOT EXISTS model.model_providers (
     id            uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_code varchar(64)   NOT NULL,
     provider_type varchar(32)   NOT NULL DEFAULT 'online',
@@ -243,11 +243,11 @@ CREATE TABLE model.model_providers (
     CONSTRAINT uq_model_providers_provider_code UNIQUE (provider_code),
     CONSTRAINT chk_model_providers_provider_type CHECK (provider_type IN ('online','self_hosted','private'))
 );
-CREATE INDEX idx_model_providers_is_active ON model.model_providers (is_active);
-CREATE INDEX idx_model_providers_type      ON model.model_providers (provider_type);
-CREATE INDEX idx_model_providers_deleted_at ON model.model_providers (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_model_providers_is_active ON model.model_providers (is_active);
+CREATE INDEX IF NOT EXISTS idx_model_providers_type      ON model.model_providers (provider_type);
+CREATE INDEX IF NOT EXISTS idx_model_providers_deleted_at ON model.model_providers (deleted_at);
 
-CREATE TABLE model.models (
+CREATE TABLE IF NOT EXISTS model.models (
     id                uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_id       uuid          REFERENCES model.model_providers(id) ON DELETE SET NULL,
     model_code        varchar(128)  NOT NULL,
@@ -273,12 +273,12 @@ CREATE TABLE model.models (
     deleted_at        timestamptz,
     CONSTRAINT uq_models_model_code UNIQUE (model_code)
 );
-CREATE INDEX idx_models_is_active   ON model.models (is_active);
-CREATE INDEX idx_models_model_type  ON model.models (model_type);
-CREATE INDEX idx_models_provider_id ON model.models (provider_id);
-CREATE INDEX idx_models_deleted_at  ON model.models (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_models_is_active   ON model.models (is_active);
+CREATE INDEX IF NOT EXISTS idx_models_model_type  ON model.models (model_type);
+CREATE INDEX IF NOT EXISTS idx_models_provider_id ON model.models (provider_id);
+CREATE INDEX IF NOT EXISTS idx_models_deleted_at  ON model.models (deleted_at);
 
-CREATE TABLE model.model_grants (
+CREATE TABLE IF NOT EXISTS model.model_grants (
     id               uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     model_id         uuid          NOT NULL REFERENCES model.models(id) ON DELETE CASCADE,
     tenant_id        uuid          NOT NULL,                  -- cross-db bare value, app-layer validated (boundary #1, no FK)
@@ -298,15 +298,21 @@ CREATE TABLE model.model_grants (
     CONSTRAINT chk_model_grants_application_type
         CHECK (application_type IN ('agent','workflow','api_client','internal_service'))
 );
-CREATE INDEX idx_model_grants_model            ON model.model_grants (model_id);
-CREATE INDEX idx_model_grants_tenant           ON model.model_grants (tenant_id);
-CREATE INDEX idx_model_grants_application      ON model.model_grants (application_id);
-CREATE INDEX idx_model_grants_application_type ON model.model_grants (application_type);
-CREATE INDEX idx_model_grants_agent            ON model.model_grants (agent_id);
-CREATE INDEX idx_model_grants_is_active        ON model.model_grants (is_active);
-CREATE INDEX idx_model_grants_task_profile     ON model.model_grants (task_profile);
+CREATE INDEX IF NOT EXISTS idx_model_grants_model            ON model.model_grants (model_id);
+CREATE INDEX IF NOT EXISTS idx_model_grants_tenant           ON model.model_grants (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_model_grants_application      ON model.model_grants (application_id);
+CREATE INDEX IF NOT EXISTS idx_model_grants_application_type ON model.model_grants (application_type);
+CREATE INDEX IF NOT EXISTS idx_model_grants_agent            ON model.model_grants (agent_id);
+CREATE INDEX IF NOT EXISTS idx_model_grants_is_active        ON model.model_grants (is_active);
+-- idx_model_grants_task_profile intentionally NOT here: on an already-existing
+-- production table (CREATE TABLE IF NOT EXISTS above is a no-op), indexing a
+-- column that doesn't exist yet would fail before incr/ ever runs to add it.
+-- Owned solely by deploy/database/ddl/incr/01_model_grants_task_profile.sql,
+-- which runs after baseline and handles both the column and its index -
+-- correct for a fresh install (runs right after CREATE TABLE) and for an
+-- existing one (runs right after ALTER TABLE ADD COLUMN) alike.
 
-CREATE TABLE model.model_price_rules (
+CREATE TABLE IF NOT EXISTS model.model_price_rules (
     id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     model_id           uuid          NOT NULL REFERENCES model.models(id) ON DELETE CASCADE,
     billing_mode       varchar(32)   NOT NULL DEFAULT 'token',
@@ -324,11 +330,11 @@ CREATE TABLE model.model_price_rules (
     updated_at         timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT chk_model_price_rules_billing_mode CHECK (billing_mode IN ('token','request'))
 );
-CREATE INDEX idx_model_price_rules_model     ON model.model_price_rules (model_id);
-CREATE INDEX idx_model_price_rules_effective ON model.model_price_rules (effective_at);
-CREATE INDEX idx_model_price_rules_is_active ON model.model_price_rules (is_active);
+CREATE INDEX IF NOT EXISTS idx_model_price_rules_model     ON model.model_price_rules (model_id);
+CREATE INDEX IF NOT EXISTS idx_model_price_rules_effective ON model.model_price_rules (effective_at);
+CREATE INDEX IF NOT EXISTS idx_model_price_rules_is_active ON model.model_price_rules (is_active);
 
-CREATE TABLE model.model_policies (
+CREATE TABLE IF NOT EXISTS model.model_policies (
     id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     model_id           uuid          NOT NULL REFERENCES model.models(id) ON DELETE CASCADE,
     tenant_id          uuid,                                   -- cross-db bare value (boundary #1, no FK); NULL = platform default
@@ -348,9 +354,9 @@ CREATE TABLE model.model_policies (
     updated_at         timestamptz   NOT NULL DEFAULT now(),
     CONSTRAINT uq_model_policies_model_tenant UNIQUE (model_id, tenant_id)
 );
-CREATE INDEX idx_model_policies_model     ON model.model_policies (model_id);
-CREATE INDEX idx_model_policies_tenant    ON model.model_policies (tenant_id);
-CREATE INDEX idx_model_policies_is_active ON model.model_policies (is_active);
+CREATE INDEX IF NOT EXISTS idx_model_policies_model     ON model.model_policies (model_id);
+CREATE INDEX IF NOT EXISTS idx_model_policies_tenant    ON model.model_policies (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_model_policies_is_active ON model.model_policies (is_active);
 
 -- ═══ schema provisioning ═══
 -- Atlas's receiving side of the platform's C3 provisioning webhook
@@ -363,7 +369,7 @@ CREATE INDEX idx_model_policies_is_active ON model.model_policies (is_active);
 -- valid event) + the monotonic `seq` (= payload.seq) used to ignore stale/
 -- out-of-order deliveries, per the wire contract's explicit requirement that
 -- delivery order is not guaranteed.
-CREATE TABLE provisioning.workspace_provisionings (
+CREATE TABLE IF NOT EXISTS provisioning.workspace_provisionings (
     id               uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id     uuid         NOT NULL,
     tenant_id        uuid,                                    -- rollup reverse-lookup only, cross-db bare value (boundary #1)
@@ -377,13 +383,13 @@ CREATE TABLE provisioning.workspace_provisionings (
     CONSTRAINT uq_workspace_provisionings_workspace_product UNIQUE (workspace_id, product_code),
     CONSTRAINT chk_workspace_provisionings_status CHECK (status IN ('pending', 'provisioned', 'deprovisioned'))
 );
-CREATE INDEX idx_workspace_provisionings_status ON provisioning.workspace_provisionings (status);
+CREATE INDEX IF NOT EXISTS idx_workspace_provisionings_status ON provisioning.workspace_provisionings (status);
 
 -- webhook_deliveries: append-only idempotency ledger keyed on delivery_id
 -- (= X-Vxture-Delivery = payload.id). At-least-once delivery means retries of
 -- the SAME delivery_id are expected and must be recognized even when they
 -- would not change workspace_provisionings.seq.
-CREATE TABLE provisioning.webhook_deliveries (
+CREATE TABLE IF NOT EXISTS provisioning.webhook_deliveries (
     id           uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     delivery_id  varchar(128) NOT NULL,
     workspace_id uuid         NOT NULL,
@@ -393,4 +399,4 @@ CREATE TABLE provisioning.webhook_deliveries (
     received_at  timestamptz  NOT NULL DEFAULT now(),
     CONSTRAINT uq_webhook_deliveries_delivery_id UNIQUE (delivery_id)
 );
-CREATE INDEX idx_webhook_deliveries_workspace ON provisioning.webhook_deliveries (workspace_id, seq);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_workspace ON provisioning.webhook_deliveries (workspace_id, seq);
