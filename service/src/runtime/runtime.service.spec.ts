@@ -29,6 +29,7 @@ const svc = new ModelRuntimeService(
   null as any,
   null as any,
   null as any,
+  null as any,
 );
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -370,6 +371,10 @@ describe("ModelRuntimeService runtime flow", () => {
     fallbackProvider: { chat: ReturnType<typeof vi.fn> };
     quota: { assertAllowed: ReturnType<typeof vi.fn> };
     metering: { record: ReturnType<typeof vi.fn> };
+    requestLog: {
+      record: ReturnType<typeof vi.fn>;
+      recordError: ReturnType<typeof vi.fn>;
+    };
   } {
     const primary = makeModel({
       modelCode: "primary-model",
@@ -431,14 +436,23 @@ describe("ModelRuntimeService runtime flow", () => {
     const providerKeys = {
       resolveKey: vi.fn().mockResolvedValue(null),
     };
+    // TD-017: real writes are covered in request-log.service.spec.ts; here the
+    // point is that the runtime calls it, and that a logging failure never
+    // propagates into the response.
+    const requestLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+      recordError: vi.fn().mockResolvedValue(undefined),
+    };
 
     return {
+      requestLog,
       service: new ModelRuntimeService(
         registry as never,
         router as never,
         quota as never,
         metering as never,
         providerKeys as never,
+        requestLog as never,
       ),
       provider,
       fallbackProvider,

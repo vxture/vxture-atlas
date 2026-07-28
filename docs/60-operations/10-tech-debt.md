@@ -32,7 +32,7 @@ repo-split plan itself - not discovered later.
 | TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
 
 | TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | open - CLAUDE.md corrected to stop asserting it exists; the client itself is unbuilt |
-| TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | open - restates TD-002 at its true scope; boundary already designed both sides (`docs/30-design/210-usage-metering-and-history.md`), only the writing code is missing |
+| TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | partially closed 2026-07-28 - part 1 shipped: Atlas now writes its own `reqlog.request_records`/`error_records` on every A1-A4 call (success and failure), attribution taken from the verified S2S token rather than the body; verified against a real Postgres. Part 2 (the platform `POST /usage/consume` call that fills `usage_event_id`) still open |
 | TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | open - dormant while TD-017 keeps the tables empty; becomes a live clock the moment usage writing lands |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
@@ -841,3 +841,38 @@ repo-split plan itself - not discovered later.
 - **Recovery condition**: a real parse provider (tracked `vxture-atlas`#38),
   or a maturity field on the descriptor (tracked `vxture-platform`#159) that
   lets Atlas advertise it honestly as not-yet-implemented.
+
+### TD-017 part 1 - progress note (2026-07-28)
+
+- **Shipped**: `service/src/reqlog/` (`RequestLogService`) writes
+  `reqlog.request_records` on every A1-A4 call and `reqlog.error_records`
+  alongside it on failure. Wired into the chat path (success, quota/grant
+  rejection, and all-candidates-exhausted) and, via `withRequestLog` in
+  `s2s-provider.shared.ts`, into embed/rerank/parse - **which previously
+  recorded nothing at all**, not even the no-op metering call the chat path
+  made. That gap was wider than TD-017 originally stated.
+- **Attribution comes from the verified token**: controllers pass
+  `req.s2sAuth` (populated by `S2sAuthGuard` from the `workspace_id` and `sub`
+  claims) as an explicit argument. It is deliberately *not* a request-body
+  field - product_210 rule 8 forbids trusting caller-supplied org/workspace
+  context, and a body field would be trivially spoofable. This also gives
+  `workspace_id`/`user_id` a trustworthy source, which the body never had.
+- **A malformed dimension does not lose the row**: the attribution columns are
+  `uuid`, and karda's real `tenantId` is a composite string (TD-010). On the
+  request path that is rightly a 400; here it is coerced to NULL, because
+  refusing to log would also discard the model/provider/token facts that were
+  valid. Verified against a real Postgres (baseline DDL applied, rows read
+  back): a non-UUID `tenantId` landed NULL while `workspaceId`, `userId`,
+  `modelCode`, `providerCode`, tokens and latency all persisted correctly, and
+  the failure pair wrote to both tables.
+- **Logging never fails the request it describes**: every write is wrapped -
+  a log failure produces a warning, never an error for the caller. Covered by
+  test.
+- **Deliberately still NULL**: `product_id` (the token carries the caller's
+  product *code*, this column wants the platform's product uuid - needs the
+  cross-database read TD-005/TD-016 track) and `usage_event_id`/`billed_*`
+  (part 2). A NULL `usage_event_id` is the documented reconciliation signal
+  from `docs/30-design/210-usage-metering-and-history.md` §4, not missing data.
+- **Known limitation**: A1/A3 provider responses carry no token counts (Zhipu
+  reports none for embedding/rerank), so those columns stay NULL for those
+  capabilities rather than being invented. Latency and attribution are real.

@@ -8,6 +8,7 @@ import { MetricsController } from "./runtime/metrics.controller";
 import { ModelAdminController } from "./runtime/model-admin.controller";
 import { ModelAdminService } from "./runtime/model-admin.service";
 import { MeteringService } from "./metering/metering.service";
+import { RequestLogService } from "./reqlog/request-log.service";
 import { ClaudeProvider } from "./providers/claude.provider";
 import { DoubaoProvider } from "./providers/doubao.provider";
 import { ZhipuProvider } from "./providers/zhipu.provider";
@@ -52,6 +53,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     ModelRouterService,
     QuotaService,
     MeteringService,
+    RequestLogService,
     DoubaoProvider,
     ZhipuProvider,
     ClaudeProvider,
@@ -71,6 +73,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     ModelRouterService,
     QuotaService,
     MeteringService,
+    RequestLogService,
     EmbeddingService,
     RerankService,
     ParseService,

@@ -10,6 +10,8 @@ import { randomUUID } from "node:crypto";
 
 import { ProviderHttpError } from "../providers/base.provider";
 import { MeteringService } from "../metering/metering.service";
+import { RequestLogService } from "../reqlog/request-log.service";
+import type { S2sAuthContext } from "./guards/s2s-auth.guard";
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { ModelRouterService } from "../router/model-router.service";
 import { QuotaService } from "../quota/quota.service";
@@ -41,6 +43,8 @@ export class ModelRuntimeService {
     private readonly metering: MeteringService,
     @Inject(ProviderKeyService)
     private readonly providerKeys: ProviderKeyService,
+    @Inject(RequestLogService)
+    private readonly requestLog: RequestLogService,
   ) {}
 
   private readonly resolveManagedKey = (
@@ -48,7 +52,10 @@ export class ModelRuntimeService {
     keyAlias: string,
   ): Promise<string | null> => this.providerKeys.resolveKey(providerCode, keyAlias);
 
-  async chat(request: ChatRequest): Promise<ChatResponse> {
+  async chat(
+    request: ChatRequest,
+    auth?: S2sAuthContext,
+  ): Promise<ChatResponse> {
     this.validateChatRequest(request);
     const modelCode = await this.resolveModelCode(request);
 
@@ -98,6 +105,15 @@ export class ModelRuntimeService {
             errorCode: readRuntimeErrorCode(error),
             fallbackAttempt,
           });
+          await this.recordFailure(
+            request,
+            requestId,
+            model.modelCode,
+            model.provider,
+            error,
+            undefined,
+            auth,
+          );
           throw this.enrichRuntimeError(error, requestId, {
             modelCode: model.modelCode,
             provider: model.provider,
@@ -144,6 +160,7 @@ export class ModelRuntimeService {
             requestId,
             providerResponse,
             latencyMs,
+            auth,
           );
 
           this.logRuntimeEvent("model_runtime_request_success", {
@@ -208,6 +225,16 @@ export class ModelRuntimeService {
         fallbackAttempt: models.length,
       });
 
+      await this.recordFailure(
+        request,
+        requestId,
+        modelCode,
+        models[models.length - 1]?.provider,
+        lastProviderError,
+        undefined,
+        auth,
+      );
+
       throw (
         lastProviderError ??
         new ModelRuntimeException(
@@ -228,7 +255,10 @@ export class ModelRuntimeService {
    * 控制器把每个 event 序列化为 SSE `data:` 行写回客户端。
    * 用量统计在流结束（done 事件）时写入。
    */
-  async *chatStream(request: ChatRequest): AsyncGenerator<StreamEvent> {
+  async *chatStream(
+    request: ChatRequest,
+    auth?: S2sAuthContext,
+  ): AsyncGenerator<StreamEvent> {
     this.validateChatRequest(request);
     const modelCode = await this.resolveModelCode(request);
 
@@ -300,6 +330,15 @@ export class ModelRuntimeService {
             errorCode: readRuntimeErrorCode(error),
             fallbackAttempt,
           });
+          await this.recordFailure(
+            request,
+            requestId,
+            model.modelCode,
+            model.provider,
+            error,
+            undefined,
+            auth,
+          );
           throw this.enrichRuntimeError(error, requestId, {
             modelCode: model.modelCode,
             provider: model.provider,
@@ -353,6 +392,7 @@ export class ModelRuntimeService {
               requestId,
               lastUsage,
               latencyMs,
+              auth,
             );
             this.logRuntimeEvent("model_runtime_stream_success", {
               request,
@@ -397,6 +437,16 @@ export class ModelRuntimeService {
         errorCode: lastProviderError?.code ?? "PROVIDER_UNAVAILABLE",
         fallbackAttempt: models.length,
       });
+
+      await this.recordFailure(
+        request,
+        requestId,
+        modelCode,
+        models[models.length - 1]?.provider,
+        lastProviderError,
+        undefined,
+        auth,
+      );
 
       throw (
         lastProviderError ??
@@ -657,14 +707,105 @@ export class ModelRuntimeService {
     );
   }
 
+  /**
+   * TD-017: a request that was accepted and then failed is still a served
+   * request - it consumed a slot, may have burned upstream quota, and is
+   * exactly what an operator wants to see. Recorded with `status: "error"` and
+   * no token counts (none were billed), plus a row in `reqlog.error_records`
+   * carrying the provider/protocol detail.
+   */
+  private async recordFailure(
+    request: ChatRequest,
+    requestId: string,
+    modelCode: string | undefined,
+    providerCode: string | undefined,
+    error: unknown,
+    latencyMs: number | undefined,
+    auth?: S2sAuthContext,
+  ): Promise<void> {
+    const applicationScope = resolveApplicationScope(request);
+    const errorCode = readRuntimeErrorCode(error);
+
+    await this.requestLog.record({
+      requestId,
+      // `reqlog.request_records.status` is CHECK-constrained to
+      // success|error|timeout. Nothing in this service distinguishes a timeout
+      // from any other provider failure today, so everything non-success is
+      // "error"; the finer reason (GRANT_DENIED / QUOTA_EXCEEDED /
+      // PROVIDER_UNAVAILABLE / ...) is carried by error_records.error_code
+      // rather than being flattened into a status the column cannot hold.
+      status: "error",
+      ...(auth?.workspaceId !== undefined
+        ? { workspaceId: auth.workspaceId }
+        : {}),
+      ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
+      tenantId: request.tenantId,
+      applicationId: applicationScope.applicationId,
+      applicationType: applicationScope.applicationType,
+      agentId: applicationScope.agentId,
+      ...(request.featureId !== undefined
+        ? { featureId: request.featureId }
+        : {}),
+      ...(modelCode !== undefined ? { modelCode } : {}),
+      ...(providerCode !== undefined ? { providerCode } : {}),
+      ...(latencyMs !== undefined ? { latencyMs } : {}),
+      ...(request.usageType !== undefined
+        ? { usageType: request.usageType }
+        : {}),
+      ...(request.businessId !== undefined
+        ? { businessId: request.businessId }
+        : {}),
+    });
+
+    await this.requestLog.recordError({
+      requestId,
+      ...(providerCode !== undefined ? { providerCode } : {}),
+      ...(modelCode !== undefined ? { modelCode } : {}),
+      ...(errorCode ? { errorCode } : {}),
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   private async recordUsage(
     model: AiModelRecord,
     request: ChatRequest,
     requestId: string,
     usage: TokenUsage,
     latencyMs: number,
+    auth?: S2sAuthContext,
   ): Promise<void> {
     const applicationScope = resolveApplicationScope(request);
+
+    // TD-017: Atlas's own per-request history. Independent of `metering.record`
+    // below, which is still the no-op consume path (TD-002) - this one really
+    // persists, so a served request stops being invisible.
+    await this.requestLog.record({
+      requestId,
+      status: "success",
+      ...(auth?.workspaceId !== undefined
+        ? { workspaceId: auth.workspaceId }
+        : {}),
+      ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
+      tenantId: request.tenantId,
+      applicationId: applicationScope.applicationId,
+      applicationType: applicationScope.applicationType,
+      agentId: applicationScope.agentId,
+      ...(request.featureId !== undefined
+        ? { featureId: request.featureId }
+        : {}),
+      modelCode: model.modelCode,
+      providerCode: model.provider,
+      inputTokens: usage.promptTokens,
+      outputTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+      latencyMs,
+      ...(request.usageType !== undefined
+        ? { usageType: request.usageType }
+        : {}),
+      ...(request.businessId !== undefined
+        ? { businessId: request.businessId }
+        : {}),
+    });
 
     await this.metering.record({
       requestId,

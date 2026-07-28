@@ -30,6 +30,8 @@ import {
 import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import { resolveApiKey } from "./resolve-api-key";
 import { ModelRuntimeException } from "./runtime.errors";
+import { RequestLogService } from "../reqlog/request-log.service";
+import type { S2sAuthContext } from "./guards/s2s-auth.guard";
 import type { AiModelRecord, IModelProvider } from "../types/runtime.types";
 
 export interface S2sProviderRequestBase extends QuotaCheckRequest {
@@ -45,6 +47,78 @@ export interface GatedModel {
   provider: IModelProvider;
   apiKey: string;
   requestId: string;
+}
+
+/**
+ * TD-017: A1/A2/A3 previously recorded nothing at all - not even the no-op
+ * metering call the chat path made - so embed/rerank/parse traffic was
+ * invisible even in principle. This wraps the capability call so every
+ * outcome lands in `reqlog`.
+ *
+ * `tokens` is optional because the A1/A3 provider responses do not report
+ * usage today (Zhipu's embedding/rerank responses carry no token counts), so
+ * those columns stay NULL rather than being invented. Latency and the
+ * attribution dimensions are real either way.
+ */
+export async function withRequestLog<T>(
+  requestLog: RequestLogService,
+  context: {
+    gated: GatedModel;
+    request: S2sProviderRequestBase;
+    auth?: S2sAuthContext | undefined;
+  },
+  call: () => Promise<T>,
+): Promise<T> {
+  const { gated, request, auth } = context;
+  const applicationScope = resolveApplicationScope(request);
+  const startedAt = Date.now();
+
+  const dimensions = {
+    requestId: gated.requestId,
+    ...(auth?.workspaceId !== undefined
+      ? { workspaceId: auth.workspaceId }
+      : {}),
+    ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
+    tenantId: request.tenantId,
+    applicationId: applicationScope.applicationId,
+    applicationType: applicationScope.applicationType,
+    agentId: applicationScope.agentId,
+    ...(request.featureId !== undefined
+      ? { featureId: request.featureId }
+      : {}),
+    modelCode: gated.model.modelCode,
+    providerCode: gated.model.provider,
+  };
+
+  try {
+    const result = await call();
+    await requestLog.record({
+      ...dimensions,
+      status: "success",
+      latencyMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    await requestLog.record({
+      ...dimensions,
+      status: "error",
+      latencyMs: Date.now() - startedAt,
+    });
+    const code =
+      error instanceof ModelRuntimeException
+        ? error.code
+        : error instanceof ProviderCapabilityNotImplementedError
+          ? "MODEL_NOT_IMPLEMENTED"
+          : undefined;
+    await requestLog.recordError({
+      requestId: gated.requestId,
+      providerCode: gated.model.provider,
+      modelCode: gated.model.modelCode,
+      ...(code !== undefined ? { errorCode: code } : {}),
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export async function resolveGatedModel(

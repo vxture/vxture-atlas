@@ -6,6 +6,7 @@ import {
   Inject,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
@@ -13,6 +14,10 @@ import {
 import { ModelRuntimeService } from "./runtime.service";
 import { ModelRegistryService } from "../registry/model-registry.service";
 import { S2sAuthGuard } from "./guards/s2s-auth.guard";
+import type {
+  S2sAuthContext,
+  S2sAuthenticatedRequest,
+} from "./guards/s2s-auth.guard";
 import type {
   AiModelRecord,
   ApplicationType,
@@ -53,16 +58,20 @@ export class ModelRuntimeController {
     private readonly registry: ModelRegistryService,
   ) {}
 
+  // TD-017: attribution comes from `req.s2sAuth` (the verified token), never
+  // from the body - product_210 rule 8 forbids trusting caller-supplied
+  // org/workspace context, and a body field would be trivially spoofable.
   @Post("chat")
   async chat(
     @Body() body: ChatRequest,
     @Res() res: ModelRuntimeResponse,
+    @Req() req: S2sAuthenticatedRequest,
   ): Promise<void> {
     if (body.stream) {
-      await this.streamChat(body, res);
+      await this.streamChat(body, res, req.s2sAuth);
       return;
     }
-    const response = await this.runtime.chat(body);
+    const response = await this.runtime.chat(body, req.s2sAuth);
     res.json(response satisfies ChatResponse);
   }
 
@@ -93,6 +102,7 @@ export class ModelRuntimeController {
   private async streamChat(
     body: ChatRequest,
     res: ModelRuntimeResponse,
+    auth?: S2sAuthContext,
   ): Promise<void> {
     res.status(200);
     res.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -106,7 +116,7 @@ export class ModelRuntimeController {
     };
 
     try {
-      for await (const event of this.runtime.chatStream(body)) {
+      for await (const event of this.runtime.chatStream(body, auth)) {
         writeEvent(event);
       }
       res.write("data: [DONE]\n\n");

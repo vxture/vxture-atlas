@@ -7,7 +7,10 @@ import { ProviderKeyService } from "../provider-keys/provider-key.service";
 import {
   resolveGatedModel,
   toS2sProviderError,
+  withRequestLog,
 } from "../runtime/s2s-provider.shared";
+import { RequestLogService } from "../reqlog/request-log.service";
+import type { S2sAuthContext } from "../runtime/guards/s2s-auth.guard";
 import { ModelRuntimeException } from "../runtime/runtime.errors";
 import {
   RERANK_CANDIDATE_POOL_LIMIT,
@@ -26,10 +29,20 @@ export class RerankService {
     private readonly quota: QuotaService,
     @Inject(ProviderKeyService)
     private readonly providerKeys: ProviderKeyService,
+    @Inject(RequestLogService)
+    private readonly requestLog: RequestLogService,
   ) {}
 
-  async rerank(request: RerankRequest): Promise<RerankResponse> {
+  async rerank(
+    request: RerankRequest,
+    auth?: S2sAuthContext,
+  ): Promise<RerankResponse> {
     this.validate(request);
+
+    // A1/A2/A3 address the caller by workspaceId; the gate (and reqlog) speak
+    // tenantId. Normalize once so the grant lookup and the recorded row agree -
+    // they must not disagree about who was charged for what.
+    const gateRequest = { ...request, tenantId: request.workspaceId };
 
     const gated = await resolveGatedModel(
       {
@@ -38,20 +51,27 @@ export class RerankService {
         quota: this.quota,
         providerKeys: this.providerKeys,
       },
-      { ...request, tenantId: request.workspaceId },
+      gateRequest,
     );
 
     try {
-      const result = await gated.provider.rerank({
-        endpointUrl: gated.model.endpointUrl,
-        apiKey: gated.apiKey,
-        modelCode: gated.model.modelCode,
-        query: request.query,
-        candidates: request.candidates,
-        ...(gated.model.config != null ? { config: gated.model.config } : {}),
-      });
+      return await withRequestLog(
+        this.requestLog,
+        { gated, request: gateRequest, auth },
+        async () => {
+        const result = await gated.provider.rerank({
+          endpointUrl: gated.model.endpointUrl,
+          apiKey: gated.apiKey,
+          modelCode: gated.model.modelCode,
+          query: request.query,
+          candidates: request.candidates,
+          ...(gated.model.config != null ? { config: gated.model.config } : {}),
+        });
 
-      return { modelCode: gated.model.modelCode, scores: result.scores };
+        return { modelCode: gated.model.modelCode, scores: result.scores };
+        },
+      );
+
     } catch (error) {
       throw toS2sProviderError(error, gated.model, gated.requestId);
     }

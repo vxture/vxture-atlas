@@ -47,11 +47,17 @@ function makeService(model: AiModelRecord, providerOverrides: Partial<{
   const router = { resolve: vi.fn().mockReturnValue(provider) };
   const providerKeys = { resolveKey: vi.fn().mockResolvedValue(null) };
 
+  const requestLog = {
+    record: vi.fn().mockResolvedValue(undefined),
+    recordError: vi.fn().mockResolvedValue(undefined),
+  };
+
   const service = new EmbeddingService(
     registry as never,
     router as never,
     quota as never,
     providerKeys as never,
+    requestLog as never,
   );
 
   return { service, registry, quota, router, provider, providerKeys };

@@ -79,6 +79,51 @@ export interface KeyRotationLogRow {
   rotatedAt: Date;
 }
 
+/**
+ * reqlog.request_records row (TD-017) - Atlas's own per-request history, the
+ * detail layer of the metering split (docs/30-design/210-usage-metering-and-history.md).
+ * Unlike the three metering delegates removed above, these two DO have real
+ * backing models in schema.prisma and real partitioned tables in this repo's
+ * own database - they are Atlas's to write, not the platform's.
+ */
+export interface RequestRecordRow {
+  id: string;
+  requestId: string;
+  tenantId: string | null;
+  workspaceId: string | null;
+  productId: string | null;
+  userId: string | null;
+  applicationId: string | null;
+  applicationType: string | null;
+  agentId: string | null;
+  featureId: string | null;
+  downstreamIdentityHash: string | null;
+  modelCode: string | null;
+  providerCode: string | null;
+  inputTokens: bigint | null;
+  outputTokens: bigint | null;
+  totalTokens: bigint | null;
+  latencyMs: number | null;
+  usageType: string | null;
+  status: string | null;
+  businessId: string | null;
+  billedMetricKey: string | null;
+  billedAmount: bigint | null;
+  usageEventId: string | null;
+  createdAt: Date;
+}
+
+/** reqlog.error_records row (TD-017). */
+export interface ErrorRecordRow {
+  id: string;
+  requestId: string | null;
+  providerCode: string | null;
+  modelCode: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+}
+
 type PrismaArgs = Record<string, unknown>;
 
 interface PrismaMutationResult {
@@ -104,6 +149,8 @@ export interface AtlasPrismaClient {
   webhookDelivery: PrismaDelegate<WebhookDeliveryRow>;
   providerApiKey: PrismaDelegate<ProviderApiKeyRow>;
   keyRotationLog: PrismaDelegate<KeyRotationLogRow>;
+  requestRecord: PrismaDelegate<RequestRecordRow>;
+  errorRecord: PrismaDelegate<ErrorRecordRow>;
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
   $transaction<T>(
