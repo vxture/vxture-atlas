@@ -32,7 +32,7 @@ repo-split plan itself - not discovered later.
 | TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
 
 | TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | partially closed 2026-07-28 - the client exists now (`PlatformEntitlementClient`, shared-secret path, short-TTL cache) and the quota gate can deny for the first time when the platform reports pools exhausted; enforcement of the *uncovered* case stays permissive until the platform publishes a real `atlas` plan_version, which it says is still a draft skeleton |
-| TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | partially closed 2026-07-28 - part 1 shipped: Atlas now writes its own `reqlog.request_records`/`error_records` on every A1-A4 call (success and failure), attribution taken from the verified S2S token rather than the body; verified against a real Postgres. Part 2 (the platform `POST /usage/consume` call that fills `usage_event_id`) still open |
+| TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | closed 2026-07-28 - part 1 (own `reqlog` writes) and part 2 (C3 `POST /usage/consume` caller) both shipped. Atlas now records every served request locally and reports realized token consumption to the platform metering kernel; a served-but-unbilled request is visible as `billed_amount IS NULL` |
 | TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | closed 2026-07-28 - `reqlog.ensure_partitions`/`drop_expired_partitions` added as db-init-applied DDL (the sole sanctioned structure-change path), retention set to 6 months, and a `reqlogPartitions` readiness check added so exhaustion can no longer fail silently; verified against a real Postgres incl. the expiry drop and DEFAULT-occupancy detection |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
@@ -995,3 +995,45 @@ repo-split plan itself - not discovered later.
   and the legacy `TenantSubscriptionQuotaRecord` path below it remains the
   no-op stub from TD-005. Closing that is the same work as TD-017 part 2 (the
   C3 consume caller), which shares this client's credential and base URL.
+
+### TD-017 part 2 - progress note (2026-07-28, closed)
+
+- **Shipped**: `PlatformEntitlementClient.consume()` calls C3
+  `POST /usage/consume {workspace_id, product, metric, amount,
+  idempotency_key}` - the platform's **sole** sanctioned write path into the
+  metering kernel (`data_commerce_200_metering.md` §11 forbids products
+  writing the usage tables directly). Wired into the chat path after a
+  successful generation.
+- **Called after the fact, deliberately**: the amount is the *realized* token
+  count, which does not exist before the provider responds. Gating already
+  happened on the C2 read (cheap, cached), so this call is the accounting
+  write, not a second gate.
+- **`idempotency_key` = `requestId`**, so a retry cannot double-charge - the
+  platform keys `usage_idempotencies` on exactly this.
+- **Never fails the request**: every consume failure - transport error,
+  non-2xx, even a `409 gated` - returns `false` and is logged. Refusing to
+  return a response we have *already produced and paid for upstream* would
+  waste the spend without recovering anything. The honest record is that it
+  ran and was not billed.
+- **Reconciliation signal changed from the original design**: the C3 response
+  body (`ConsumeResponseBody` in `@vxture/shared`) carries `gated`,
+  `consumed`, `remaining_total` and `per_pool_breakdown` - but **no event
+  id**. So `reqlog.usage_event_id` cannot be populated as
+  `docs/30-design/210-usage-metering-and-history.md` §4 originally assumed.
+  Correlation is instead via `request_id`, which both sides record, and the
+  "served but not billed" signal is `billed_amount IS NULL`. Reported to the
+  platform line - returning the event id would let the direct reference work
+  as designed.
+- **Descriptor corrected alongside**: `atlas.chat` metering was declared
+  `mode: "per_call"`, which is commercially wrong for an LLM gateway (a
+  100k-token completion and a 100-token one are not one unit). Changed to
+  `per_unit`, matching what the consume call actually sends as `amount`. The
+  advertised metering and the billed amount must not drift apart.
+- **Not billed yet in practice**: atlas's plan catalog is an unpublished draft
+  on the platform side, so `product_metrics` for `atlas.chat` likely does not
+  resolve and consume will return non-2xx. That is expected and handled - the
+  requests are recorded locally with `billed_amount` NULL, so nothing is lost
+  and the gap is measurable the moment the catalog is published.
+- **A1/A3 not wired**: Zhipu reports no token counts for embedding/rerank, so
+  there is no realized amount to consume. Deferred rather than billing a
+  fabricated number.

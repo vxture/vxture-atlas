@@ -38,6 +38,16 @@ export interface RequestLogEntry {
   latencyMs?: number | undefined;
   usageType?: "normal" | "retry" | "test" | undefined;
   businessId?: string | undefined;
+
+  /**
+   * Set only when the C3 consume call actually landed (TD-017 part 2). Absent
+   * means "served but not billed" - the reconciliation signal from
+   * docs/30-design/210-usage-metering-and-history.md §4. `usageEventId` stays
+   * unset regardless: the consume response does not return the event id, so
+   * correlation is via `requestId`, which both sides carry.
+   */
+  billedMetricKey?: string | undefined;
+  billedAmount?: number | undefined;
 }
 
 /** A failed request's provider/protocol detail (`reqlog.error_records`). */

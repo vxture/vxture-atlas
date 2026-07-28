@@ -30,6 +30,7 @@ const svc = new ModelRuntimeService(
   null as any,
   null as any,
   null as any,
+  null as any,
 );
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -375,6 +376,10 @@ describe("ModelRuntimeService runtime flow", () => {
       record: ReturnType<typeof vi.fn>;
       recordError: ReturnType<typeof vi.fn>;
     };
+    entitlements: {
+      resolve: ReturnType<typeof vi.fn>;
+      consume: ReturnType<typeof vi.fn>;
+    };
   } {
     const primary = makeModel({
       modelCode: "primary-model",
@@ -443,9 +448,16 @@ describe("ModelRuntimeService runtime flow", () => {
       record: vi.fn().mockResolvedValue(undefined),
       recordError: vi.fn().mockResolvedValue(undefined),
     };
+    // TD-017 part 2: consume is covered in its own cases; default to "not
+    // billed" so the pre-existing assertions stay about routing/fallback.
+    const entitlements = {
+      resolve: vi.fn().mockResolvedValue({ kind: "not-configured" }),
+      consume: vi.fn().mockResolvedValue(false),
+    };
 
     return {
       requestLog,
+      entitlements,
       service: new ModelRuntimeService(
         registry as never,
         router as never,
@@ -453,6 +465,7 @@ describe("ModelRuntimeService runtime flow", () => {
         metering as never,
         providerKeys as never,
         requestLog as never,
+        entitlements as never,
       ),
       provider,
       fallbackProvider,
@@ -615,5 +628,61 @@ describe("ModelRuntimeService runtime flow", () => {
       service.chat(makeRequest({ modelCode: "primary-model" })),
     ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
     expect(metering.record).not.toHaveBeenCalled();
+  });
+
+  // ── TD-017 part 2: C3 consume ──────────────────────────────────────────
+  it("bills realized tokens and records that it was billed", async () => {
+    const h = makeRuntime();
+    h.entitlements.consume.mockResolvedValue(true);
+
+    await h.service.chat(
+      { modelCode: "primary-model", messages: [{ role: "user", content: "hi" }], tenantId: "t1" } as never,
+      { workspaceId: "ws-1" } as never,
+    );
+
+    expect(h.entitlements.consume).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        metric: "atlas.chat",
+        // amount is the realized token count, matching the descriptor's
+        // per_unit metering declaration - the two must not drift apart.
+        amount: expect.any(Number),
+      }),
+    );
+    const logged = h.requestLog.record.mock.calls[0]?.[0] as {
+      billedMetricKey?: string;
+    };
+    expect(logged.billedMetricKey).toBe("atlas.chat");
+  });
+
+  it("still serves and records the request when billing fails", async () => {
+    // A served inference must not become an error because accounting failed;
+    // the absent billedAmount is the reconciliation signal instead.
+    const h = makeRuntime();
+    h.entitlements.consume.mockResolvedValue(false);
+
+    await expect(
+      h.service.chat(
+        { modelCode: "primary-model", messages: [{ role: "user", content: "hi" }], tenantId: "t1" } as never,
+        { workspaceId: "ws-1" } as never,
+      ),
+    ).resolves.toBeTruthy();
+
+    const logged = h.requestLog.record.mock.calls[0]?.[0] as {
+      billedMetricKey?: string;
+    };
+    expect(logged.billedMetricKey).toBeUndefined();
+  });
+
+  it("does not attempt to bill when the token carries no workspace", async () => {
+    const h = makeRuntime();
+
+    await h.service.chat({
+      modelCode: "primary-model",
+      messages: [{ role: "user", content: "hi" }],
+      tenantId: "t1",
+    } as never);
+
+    expect(h.entitlements.consume).not.toHaveBeenCalled();
   });
 });

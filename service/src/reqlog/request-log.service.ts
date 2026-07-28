@@ -76,13 +76,16 @@ export class RequestLogService {
               : null,
           usageType: clamp(entry.usageType, 16),
           businessId: clamp(entry.businessId, 128),
+          billedMetricKey: clamp(entry.billedMetricKey, 64),
+          billedAmount: asBigIntOrNull(entry.billedAmount),
           // `productId` stays NULL: the S2S token carries the caller's product
           // *code* (act.sub, e.g. "karda") and this column is a uuid FK-shaped
           // reference into the platform's product.products - resolving one to
           // the other needs the cross-database read that TD-005/TD-016 track.
-          // `usageEventId`/`billed*` stay NULL until the consume call lands
-          // (TD-017 part 2); a NULL there is the documented reconciliation
-          // signal, not missing data.
+          // `usageEventId` stays NULL: the C3 consume response carries no
+          // event id, so cross-side correlation is via `requestId`, which
+          // both sides record. A NULL `billedAmount` is the reconciliation
+          // signal for "served but not billed".
         },
       });
     } catch (error) {
