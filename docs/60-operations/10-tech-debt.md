@@ -913,16 +913,24 @@ repo-split plan itself - not discovered later.
   detached+dropped; the `DEFAULT` partition was never touched; the exact
   runway query returned 13 months; and a write dated beyond the runway landed
   in DEFAULT and was detected. Three readiness tests cover warn/fail/pass.
-- **Remaining gap, reported not worked around**: the governance standard has
-  no sanctioned path for *recurring* DB maintenance - only manually-approved
-  one-off runs. Today that means someone must trigger db-init roughly twice a
-  year (12-month runway, warn at 2). Raised as `vxture-platform`#164, which
-  proposes the standard grow a third category - *sanctioned recurring
-  maintenance* - alongside "deploy" and "authorized structure change": a
-  scheduled auditable path restricted to a pre-approved set of idempotent
-  operations, so the operation set is approved once instead of every run.
-  Left to the platform line to decide once for every repo with partitioned
-  tables, rather than each inventing its own mechanism.
+- **Governance gap now resolved (2026-07-29)**: `vxture-platform`#164 (proposal
+  for a third category alongside "deploy" and "authorized structure change")
+  answered same-day as filed - `140-repo-governance-standard.md` §6 now has
+  `db-maintenance.yml`: a PR-reviewed whitelist of idempotent named functions
+  in `deploy/database/ddl/incr/*` (approval sinks into the PR that adds the
+  function, not per execution), scheduled (cron) + `workflow_dispatch` for
+  manual catch-up, function-name enum input (not free SQL), still
+  audit-logged per run, still requires an observability signal (this repo's
+  `reqlogPartitions` `/readyz` check is cited as the reference shape).
+  Structural changes stay on `db-init` - this is not a second door into
+  schema changes.
+- **Migration off the manual db-init cadence is Atlas's own scheduling item,
+  not urgent**: `reqlog.ensure_partitions`/`drop_expired_partitions` are the
+  natural first tenant of `db-maintenance.yml` per the platform line, and
+  wiring them in is "a small PR against the new mechanism, not a redesign" -
+  but the twice-yearly manual cadence (12-month runway, warn at 2) already
+  works and is observable, so this is scheduled at Atlas's convenience, not
+  tracked as blocking anything.
 
 ## TD-020 - branch protection was advisory for admins
 
