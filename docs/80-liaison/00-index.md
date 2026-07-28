@@ -45,8 +45,8 @@ issue state is the source of truth, not this row.
 | [#144](https://github.com/vxture/vxture-platform/issues/144) | platform | `model-runtime-client` coordination for #40 | Closed - `client.ts` migrated to `/v1/chat`, verified |
 | [#145](https://github.com/vxture/vxture-platform/issues/145) | platform | Confirm Atlas production registration | Closed |
 | [#147](https://github.com/vxture/vxture-platform/issues/147) | platform | (karda-side coverage gap, closed by karda) | Closed |
-| [#148](https://github.com/vxture/vxture-platform/issues/148) | platform | Atlas admin-UI gaps + admin-surface architecture discussion | Open - `product_250_management-plane-contract.md` v0.1 draft in review, Batch A/B not yet landed |
-| [#152](https://github.com/vxture/vxture-platform/issues/152) | platform | `modelCode` provider-prefix breaks real upstream calls | Open - options laid out, not yet decided |
+| [#152](https://github.com/vxture/vxture-platform/issues/152) | platform | `modelCode` provider-prefix breaks real upstream calls | Closed - clarified as dispatch-key-vs-wire-value (platform#176); `config.upstreamModel` implemented atlas-side (TD-012) |
+| [#148](https://github.com/vxture/vxture-platform/issues/148) | platform | Atlas admin-UI gaps + admin-surface architecture discussion | Closed - architecture answered by product_250 M-1..M-5; provider-keys/taskProfile UI gaps slotted into atlas admin-module batch |
 | [#156](https://github.com/vxture/vxture-platform/issues/156) | platform | Actionable checklist: update model-runtime-client/admin-bff/console-bff to `/v1`\|`/capability` before next Atlas deploy | Closed - all three call sites verified migrated |
 | [#159](https://github.com/vxture/vxture-platform/issues/159) | platform | product_210 §4.1 `ToolDescriptor` has no endpoint/path field - discovery can't announce a path change (TD-015) | Closed - shipped as §4.1a (`platform`#173), mirrored into atlas's descriptors |
 | [#164](https://github.com/vxture/vxture-platform/issues/164) | platform | Governance gap: no sanctioned path for recurring DB maintenance (TD-018) | Open - proposal, awaiting platform decision |

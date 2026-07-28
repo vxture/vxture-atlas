@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import { BaseProvider, joinEndpoint } from "./base.provider";
+import { BaseProvider, joinEndpoint, resolveUpstreamModel } from "./base.provider";
 import type {
   ChatMessage,
   FinishReason,
@@ -44,7 +44,7 @@ export class ClaudeProvider extends BaseProvider {
 
   async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
     const body: Record<string, unknown> = {
-      model: request.modelCode,
+      model: resolveUpstreamModel(request),
       system: buildSystemPrompt(request.messages),
       messages: buildClaudeMessages(request.messages),
       max_tokens: request.maxTokens ?? 4096,

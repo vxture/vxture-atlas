@@ -61,6 +61,34 @@ describe("ZhipuProvider.embed", () => {
       ],
     });
   });
+
+  it("sends config.upstreamModel instead of modelCode when set (platform#152)", async () => {
+    // Once the registry row is renamed to the prefixed convention
+    // (e.g. zhipu/embedding-3) with upstreamModel: "embedding-3" set, the
+    // wire body must still send the bare vendor id, not the dispatch key.
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        model: "embedding-3",
+        object: "list",
+        data: [{ index: 0, object: "embedding", embedding: [0.1, 0.2] }],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new ZhipuProvider();
+    await provider.embed({
+      endpointUrl: "https://open.bigmodel.cn/api/paas/v4",
+      apiKey: "key",
+      modelCode: "zhipu/embedding-3",
+      config: { upstreamModel: "embedding-3" },
+      texts: ["a"],
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      model: "embedding-3",
+    });
+  });
 });
 
 describe("ZhipuProvider.rerank", () => {

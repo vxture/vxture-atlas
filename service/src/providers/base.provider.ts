@@ -11,6 +11,33 @@ import type {
   StreamEvent,
 } from "../types/runtime.types";
 
+/**
+ * `model_code` is Atlas's internal dispatch key (which adapter to route to),
+ * not necessarily the literal value an upstream vendor API accepts - the two
+ * only look identical for the three legacy unprefixed rows
+ * (`vxture-platform`'s `42-model-provider-registry-plan.md` §1.1, added
+ * 2026-07-28 in response to this session's platform#152: Atlas's real
+ * Doubao/Zhipu calls 404'd because adapters sent `model_code` verbatim,
+ * including the `{provider_code}/` dispatch prefix, as the wire-level
+ * `model` field).
+ *
+ * `config.upstreamModel` (existing jsonb column, no DDL) is the vendor's real
+ * bare model id when it differs from `model_code`. Every adapter should
+ * resolve through this rather than reading `request.modelCode` directly for
+ * the outbound wire value - falling back to `modelCode` covers both the
+ * legacy unprefixed rows and any model that has not been given an explicit
+ * `upstreamModel` yet.
+ */
+export function resolveUpstreamModel(request: {
+  modelCode: string;
+  config?: Record<string, unknown>;
+}): string {
+  const upstreamModel = request.config?.["upstreamModel"];
+  return typeof upstreamModel === "string" && upstreamModel.trim()
+    ? upstreamModel.trim()
+    : request.modelCode;
+}
+
 export class ProviderCapabilityNotImplementedError extends Error {
   constructor(
     readonly providerName: string,
