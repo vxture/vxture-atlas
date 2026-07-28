@@ -47,6 +47,7 @@ export class EmbeddingService {
         providerKeys: this.providerKeys,
       },
       gateRequest,
+      auth,
     );
 
     try {

@@ -52,6 +52,7 @@ export class RerankService {
         providerKeys: this.providerKeys,
       },
       gateRequest,
+      auth,
     );
 
     try {

@@ -9,6 +9,7 @@ import { ModelAdminController } from "./runtime/model-admin.controller";
 import { ModelAdminService } from "./runtime/model-admin.service";
 import { MeteringService } from "./metering/metering.service";
 import { RequestLogService } from "./reqlog/request-log.service";
+import { PlatformEntitlementClient } from "./platform/platform-entitlement.client";
 import { TenancyController } from "./tenancy/tenancy.controller";
 import { TenancyService } from "./tenancy/tenancy.service";
 import { ClaudeProvider } from "./providers/claude.provider";
@@ -57,6 +58,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     QuotaService,
     MeteringService,
     RequestLogService,
+    PlatformEntitlementClient,
     TenancyService,
     DoubaoProvider,
     ZhipuProvider,

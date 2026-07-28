@@ -98,10 +98,15 @@ describe("EmbeddingService.embed", () => {
     ).rejects.toMatchObject({ code: "MODEL_NOT_IMPLEMENTED" });
 
     expect(registry.getActiveModel).toHaveBeenCalledWith(model.modelCode);
-    expect(quota.assertAllowed).toHaveBeenCalledWith(
-      model,
-      expect.objectContaining({ tenantId: "ws-1" }),
-    );
+    // Asserts the gating contract - the model, and workspaceId normalized to
+    // the tenant scope - rather than the exact arity, which TD-016 extended
+    // with an optional auth argument.
+    const [gatedModel, gatedRequest] = quota.assertAllowed.mock.calls[0] as [
+      unknown,
+      { tenantId: string },
+    ];
+    expect(gatedModel).toEqual(model);
+    expect(gatedRequest).toMatchObject({ tenantId: "ws-1" });
   });
 
   it("maps a not-implemented provider to a 501 MODEL_NOT_IMPLEMENTED error", async () => {

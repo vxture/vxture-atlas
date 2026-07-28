@@ -93,7 +93,7 @@ export class ModelRuntimeService {
 
       for (const [fallbackAttempt, model] of models.entries()) {
         try {
-          await this.quota.assertAllowed(model, request);
+          await this.quota.assertAllowed(model, request, auth);
         } catch (error) {
           this.logRuntimeEvent("model_runtime_request_failed", {
             request,
@@ -318,7 +318,7 @@ export class ModelRuntimeService {
 
       for (const [fallbackAttempt, model] of models.entries()) {
         try {
-          await this.quota.assertAllowed(model, request);
+          await this.quota.assertAllowed(model, request, auth);
         } catch (error) {
           this.logRuntimeEvent("model_runtime_stream_failed", {
             request,

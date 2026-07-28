@@ -129,11 +129,12 @@ export async function resolveGatedModel(
     providerKeys: ProviderKeyService;
   },
   request: S2sProviderRequestBase,
+  auth?: S2sAuthContext,
 ): Promise<GatedModel> {
   const requestId = request.requestId?.trim() || randomUUID();
   const modelCode = await resolveModelCode(deps.registry, request);
   const model = await deps.registry.getActiveModel(modelCode);
-  await deps.quota.assertAllowed(model, request);
+  await deps.quota.assertAllowed(model, request, auth);
   const provider = deps.router.resolve(model.provider, model.modelCode);
   const apiKey = await resolveApiKey(
     {
