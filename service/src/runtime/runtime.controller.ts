@@ -38,14 +38,12 @@ interface ModelRuntimeResponse {
   flushHeaders?: () => void;
 }
 
-// vxture-atlas#40: /v1/chat + /v1/models are additive aliases for the legacy
-// /model-platform/chat + /model-platform/models paths - NOT a replacement.
-// packages/ai/model-runtime-client (vxture-platform) hardcodes the legacy
-// path and is varda's live production client (see TD-003a) - the legacy
-// path stays until that client is coordinated-updated and released, per
-// product_210_tool-protocol.md §4.3's deprecation-cycle rule. New consumers
-// (e.g. karda) should prefer /v1/* for consistency with A1-A3.
-@Controller(["model-platform", "v1"])
+// vxture-atlas#40/TD-013 (2026-07-28): /model-platform/chat|models retired,
+// /v1 is now the only path. packages/ai/model-runtime-client
+// (vxture-platform, varda's live client) still calls the old path as of this
+// change - breaks until that repo updates, by explicit product decision (see
+// TD-013 progress note) rather than a further deprecation-alias cycle.
+@Controller("v1")
 @UseGuards(S2sAuthGuard)
 export class ModelRuntimeController {
   constructor(

@@ -18,9 +18,9 @@ import type {
   RotateProviderKeyBody,
 } from "./provider-key.types";
 
-// See model-admin.controller.ts for the /capability naming rationale and why
-// the legacy model-platform/admin prefix stays as an additive alias for now.
-@Controller(["capability/provider-keys", "model-platform/admin/provider-keys"])
+// See model-admin.controller.ts for the /capability naming rationale - the
+// legacy model-platform/admin/provider-keys prefix is retired, no alias.
+@Controller("capability/provider-keys")
 @UseGuards(S2sAuthGuard)
 export class ProviderKeyController {
   constructor(
