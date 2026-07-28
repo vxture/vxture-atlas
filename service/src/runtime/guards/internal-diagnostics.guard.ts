@@ -1,6 +1,6 @@
 /**
  * internal-diagnostics.guard.ts - 模型平台内部诊断访问保护
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category guard
  * @author AI-Generated

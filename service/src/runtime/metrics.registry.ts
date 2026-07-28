@@ -1,6 +1,6 @@
 /**
  * metrics.registry.ts - 模型平台 Prometheus 指标注册与采集
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category metrics
  * @author AI-Generated
@@ -95,7 +95,7 @@ export class MetricsRegistry {
 
     collectDefaultMetrics({
       register: this.registry,
-      labels: { component: "model-platform" },
+      labels: { component: "atlas" },
     });
 
     for (const name of Object.keys(METRIC_DEFINITIONS) as MetricName[]) {

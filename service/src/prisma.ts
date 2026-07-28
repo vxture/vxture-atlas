@@ -94,7 +94,7 @@ interface PrismaDelegate<TRecord> {
   upsert(args: PrismaArgs): Promise<TRecord>;
 }
 
-export interface ModelPlatformPrismaClient {
+export interface AtlasPrismaClient {
   modelProvider: PrismaDelegate<ModelProviderRecord>;
   modelDefinition: PrismaDelegate<AiModelRow>;
   modelGrant: PrismaDelegate<AiModelGrantRecord>;
@@ -107,18 +107,18 @@ export interface ModelPlatformPrismaClient {
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
   $transaction<T>(
-    fn: (tx: ModelPlatformPrismaClient) => Promise<T>,
+    fn: (tx: AtlasPrismaClient) => Promise<T>,
   ): Promise<T>;
 }
 
 declare global {
-  var __vxtureModelPlatformPrisma: ModelPlatformPrismaClient | undefined;
+  var __vxtureAtlasPrisma: AtlasPrismaClient | undefined;
 }
 
-export const prisma: ModelPlatformPrismaClient =
-  globalThis.__vxtureModelPlatformPrisma ??
-  (new PrismaClientImpl() as unknown as ModelPlatformPrismaClient);
+export const prisma: AtlasPrismaClient =
+  globalThis.__vxtureAtlasPrisma ??
+  (new PrismaClientImpl() as unknown as AtlasPrismaClient);
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.__vxtureModelPlatformPrisma = prisma;
+  globalThis.__vxtureAtlasPrisma = prisma;
 }

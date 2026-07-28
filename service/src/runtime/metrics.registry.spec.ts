@@ -1,6 +1,6 @@
 /**
  * metrics.registry.spec.ts - 模型平台轻量指标注册表测试
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category test
  * @author AI-Generated

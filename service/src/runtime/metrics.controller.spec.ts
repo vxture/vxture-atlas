@@ -1,6 +1,6 @@
 /**
  * metrics.controller.spec.ts - 模型平台指标抓取控制器测试
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category test
  * @author AI-Generated

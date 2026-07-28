@@ -1,11 +1,11 @@
 /**
- * status-page.ts - human-readable HTML rendering of ModelPlatformReadyResponse.
+ * status-page.ts - human-readable HTML rendering of AtlasReadyResponse.
  * Atlas has no portals/ (services profile) - karda/arda's /status is a Next.js
  * portal page; this is the equivalent for a backend-only service: render the
  * same data /readyz already computes, as HTML instead of
  * JSON, served directly by this NestJS app. No new data source, no new checks.
  */
-import type { HealthCheckResult, ModelPlatformReadyResponse } from "./health.service";
+import type { HealthCheckResult, AtlasReadyResponse } from "./health.service";
 
 const STATUS_COLORS: Record<string, string> = {
   ok: "#16a34a",
@@ -48,7 +48,7 @@ function renderCheckRow(name: string, check: HealthCheckResult): string {
     </tr>`;
 }
 
-export function renderStatusPage(data: ModelPlatformReadyResponse): string {
+export function renderStatusPage(data: AtlasReadyResponse): string {
   const checkRows = Object.entries(data.checks)
     .map(([name, check]) => renderCheckRow(name, check))
     .join("");
@@ -57,7 +57,7 @@ export function renderStatusPage(data: ModelPlatformReadyResponse): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>atlas · model-platform status</title>
+<title>atlas status</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 2rem; background: #0b0f14; color: #e5e7eb; }
@@ -74,7 +74,7 @@ export function renderStatusPage(data: ModelPlatformReadyResponse): string {
 </style>
 </head>
 <body>
-  <h1>atlas · model-platform</h1>
+  <h1>atlas</h1>
   <div class="sub">overall status:
     <span class="badge" style="background:${statusColor(data.status)}">${escapeHtml(data.status)}</span>
   </div>

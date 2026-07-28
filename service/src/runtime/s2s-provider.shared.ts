@@ -1,7 +1,7 @@
 /**
  * s2s-provider.shared.ts - shared plumbing for the A1/A2/A3 S2S provider surface
  * (embed/parse/rerank, TD-003, docs/30-design/200-s2s-provider-surface.md).
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category Runtime
  *

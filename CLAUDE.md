@@ -53,11 +53,19 @@ upstream model providers - Doubao/Claude/OpenAI/private).
 ## Name cascade (product code `atlas`)
 
 OIDC client pair `atlas` / `atlas-beta`; compose project and container prefix
-`atlas-app` / `atlas-db`; image name `atlas-app`; database
+`atlas-app` / `atlas-db`; image name `atlas-app`; workspace package
+`@atlas/service` (matching the sibling convention `@arda/app` / `@karda/app`;
+renamed 2026-07-28 from the inherited `@vxture/service-model-platform`, see
+TD-013); NestJS root module `AtlasModule`; health identity `service: "atlas"`
+and metrics label `component: "atlas"` (standard 025); database
 `vxturestudio_modelruntime_main` with service role `atlas_svc`; secrets
 `ATLAS_DB_SVC_PASSWORD`, `ATLAS_PROVISION_WEBHOOK_SECRET`,
 `ATLAS_WEBHOOK_BASE_URL`; public host `atlas.vxture.com` (reserved, not yet
 bound - Atlas is tailnet-only today, see docs/50-deployment/00-index.md).
+
+HTTP paths are NOT part of this cascade - `/v1/*` (data plane) and
+`/capability/*` (operator plane) are deliberate, see
+`docs/20-specs/10-http-surface.md`.
 
 ## Build status
 
@@ -130,7 +138,7 @@ from the required set.
   the docs numbering guardrail, the data-architecture guardrail (DDL <-> Prisma
   lockstep), and the workflow guardrail (workflows parse and keep triggers).
 - `build`: `pnpm type-check:all` plus the NestJS esbuild bundle build.
-- `test-coverage`: `pnpm --filter @vxture/service-model-platform test`.
+- `test-coverage`: `pnpm --filter @atlas/service test`.
 - `audit` (separate required check): `osv-scanner` (pinned binary) scans
   `pnpm-lock.yaml`, hard-blocking on any new finding, with
   `--config .osv-scanner.toml`.

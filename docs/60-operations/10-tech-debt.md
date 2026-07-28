@@ -27,7 +27,9 @@ repo-split plan itself - not discovered later.
 | TD-010 | A non-UUID `tenantId`/`applicationId` reaching `model.model_grants` (a `uuid` column) crashed as an unhandled Prisma error - opaque `500`, found live via karda's first real end-to-end probe (`vxture-atlas`#47) | 2026-07-27 | closed 2026-07-27 - `ModelRegistryRepository.findBestGrant`/`findModelCodeForTaskProfile`/`listGrantedModels` now validate UUID format before querying, throwing a clean `400 INVALID_TENANT_ID`/`INVALID_APPLICATION_ID` instead; reproduced and verified against a real local Postgres before/after the fix |
 | TD-011 | TD-003b's `model_grants.task_profile` column shipped only in `00_baseline.sql` (create-once, no-op against an already-provisioned table) with no incremental migration - production never actually got the column, so every grant/taskProfile query 500'd for real (karda re-test, `vxture-atlas`#47) even after TD-010's fix | 2026-07-28 | closed 2026-07-28 - added `deploy/database/ddl/incr/01_model_grants_task_profile.sql`; also discovered and fixed `00_baseline.sql` was missing `IF NOT EXISTS` on every `CREATE TABLE`/`CREATE INDEX` (contradicting its own db-init.yml's documented "every statement is IF NOT EXISTS" assumption) - re-running `db-init apply` against an already-initialized database would have failed at the first statement, before ever reaching `incr/`; fixed all 14 tables + all indexes. Verified against a real local Postgres: reproduced the exact production state (old baseline, no column), applied the fixed baseline+97+98+incr sequence twice in a row, both clean |
 | TD-012 | `model_code` is sent verbatim as the upstream provider's `model` field (`buildOpenAiCompatibleBody`, no prefix-stripping) - a `{provider_code}/{vendor_model_name}`-prefixed code (per `vxture-platform`'s `42-model-provider-registry-plan.md` §1 convention, e.g. seeded `deepseek/deepseek-chat`) 404s against the real upstream API, confirmed live with both `doubao`/`zhipu` during `vxture-atlas`#47 testing (2026-07-28) | 2026-07-28 | workaround confirmed working 2026-07-28 - `doubao-seed-2-0-lite-260428`/`doubao-seed-2-0-pro-260215`/`glm-5.2` (bare, no prefix) all returned real `201` generations for karda's test tenant, full chain (token-exchange -> verify -> route -> grant -> upstream inference) proven end to end, `vxture-atlas`#47/`vxture-karda`#76/`vxture-platform`#145/#147 all closed. The underlying naming-convention question is still open at `vxture-platform`#152 - only the immediate blocking impact is resolved, not the convention itself |
-| TD-013 | `model-platform` was never a deliberate API namespace - a leftover package name (`@vxture/service-model-platform`) carried into route prefixes at repo-split time, applied inconsistently (health duplicated under both bare and prefixed paths) and, for the admin surface, now actively wrong given product_250's BSS/OSS split | 2026-07-28 | closed 2026-07-28 - Atlas-side rename done AND legacy `model-platform/*` paths retired outright (no alias), by explicit product decision to accept cross-repo breakage over carrying a dual-path forever; see progress note for the three known callers that now 404 until updated |
+| TD-013 | `model-platform` was never a deliberate API namespace - a leftover package name (`@vxture/service-model-platform`) carried into route prefixes at repo-split time, applied inconsistently (health duplicated under both bare and prefixed paths) and, for the admin surface, now actively wrong given product_250's BSS/OSS split | 2026-07-28 | closed 2026-07-28 - paths renamed + legacy `model-platform/*` retired outright (no alias, accepting cross-repo breakage); part 3 then renamed the service identity, metric label, package, and module family to `atlas` after self-review caught that only the paths had been done |
+| TD-014 | Build provenance never reached the image: `build.yml` passed `APP_VERSION`/`GIT_SHA`/`BUILD_TIME`/`DEPLOY_STAGE` as build-args but `service/Dockerfile` declared no matching `ARG`, so Docker silently dropped all four and production `/healthz` reported `version:"dev"`, `gitSha:"unknown"`, `stage:"dev"` - violating standard 025 §4/§6/§7, the exact failure mode that standard exists to prevent | 2026-07-28 | closed 2026-07-28 - four `ARG`+`ENV` added to the runtime stage with honest defaults; found by self-review, after the v0.1.9 deploy verification had to fall back to `docker ps` image tags because the health endpoint could not say which build was live |
+| TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -644,3 +646,85 @@ repo-split plan itself - not discovered later.
   and #148 (admin-bff/capconsole-bff sequencing) both commented with the
   breaking-change list; dedicated actionable issue filed at
   `vxture-platform`#156.
+- **Part 3 (2026-07-28, found by self-review after the deploy)**: parts 1-2
+  renamed the *paths* but left the name alive everywhere else - the service
+  still self-identified as `model-platform` in every `/healthz` + `/readyz`
+  identity block (standard 025 §3 `service` field), in the Prometheus label
+  `component`, and in the `/status` page title, while the package
+  (`@vxture/service-model-platform`), root module (`ModelPlatformModule`),
+  and the whole `ModelPlatform*` symbol family kept the original name. The
+  health identity and metric label are arguably *more* visible than the
+  paths, since ops aggregation keys on them. All renamed to `atlas` /
+  `@atlas/service` / `AtlasModule` / `Atlas*`; `@atlas/service` matches the
+  sibling convention for independent product repos (`@arda/app`,
+  `@karda/app`), not the `@vxture/service-*` shape inherited from the
+  monorepo. Verified no consumer keyed on the old identity: repo-wide search
+  of `vxture-platform` for `service="model-platform"` / `component=...`
+  aggregation in dashboards, alert scripts, and configs returned nothing, so
+  unlike the path retirement this rename breaks no known consumer. The
+  `@package` JSDoc headers were updated too (they name the package the file
+  itself belongs to, which did change). What is deliberately left alone: the
+  narrative "extracted from `@vxture/service-model-platform`" references in
+  `CLAUDE.md`/`README.md`/`docs/90-memory/10-agent.md`, which describe the
+  upstream in-monorepo package - that package genuinely still carries that
+  name inside `vxture-platform`, so rewriting those sentences would make the
+  history wrong rather than current.
+
+## TD-014 - build provenance never reached the image
+
+- **What was broken**: `.github/workflows/build.yml` (lines ~182-187)
+  correctly derived and passed `APP_VERSION`/`GIT_SHA`/`BUILD_TIME`/
+  `DEPLOY_STAGE` as build-args, per standard 025 §4.2. `service/Dockerfile`
+  declared **no** matching `ARG`, and Docker silently discards build-args a
+  Dockerfile does not declare - so none of the four ever became an `ENV`, and
+  `buildHealthIdentity` (`@vxture/shared`) fell back to its honest defaults
+  on every build.
+- **Observed in production**: `GET /healthz` on worker-02 immediately after
+  the v0.1.9 deploy returned `"version":"dev"`, `"gitSha":"unknown"`,
+  `"stage":"dev"`, `"buildTime":"unknown"`. Standard 025 §1 names this exact
+  symptom as the motivating incident class, §6 lists it as a forbidden
+  anti-pattern, and §7 item 5 makes "verify these are real values, not
+  dev/unknown/local" a post-deploy compliance check that had never been run
+  here.
+- **Why it mattered concretely**: verifying that v0.1.9 was actually live -
+  during a breaking change, where knowing the running build is the whole
+  question - could not be done from the service itself. It had to fall back
+  to reading image tags off `docker ps`. The health endpoint is supposed to
+  be the runtime version source of truth (standard 025 §1) and was carrying
+  no information.
+- **Fix (2026-07-28)**: added the four `ARG`s plus the `ENV` block to the
+  Dockerfile's `runtime` stage, with the standard's honest defaults
+  (`dev`/`unknown`) so a plain local `docker build` still works and reports
+  truthfully. No workflow change was needed - that half was already correct.
+- **Follow-up**: the post-deploy check from standard 025 §7 item 5 is not
+  automated anywhere. `deploy.sh`'s `cmd_verify` only asserts `/healthz`
+  returns 200, not that the identity block carries real values - which is
+  why this survived every prior deploy. Worth folding into `cmd_verify`,
+  recorded here rather than silently skipped.
+
+## TD-015 - capability discovery cannot convey endpoint paths
+
+- **What is missing**: `product_210_tool-protocol.md` §4.1's `ToolDescriptor`
+  shape (mirrored in `service/src/discovery/discovery.types.ts`) carries
+  `name`/`title`/`description`/`input_schema`/`output_schema`/`version`/
+  `deprecated`/`metering`/`authz` - and no field saying *where* the tool is
+  invoked. A consumer can discover that `atlas.chat` exists, what it accepts,
+  and how it meters, but not the URL to POST to.
+- **Why it is debt, not a nitpick**: product_210 §11 item 6 requires that
+  "consumers should be able to learn availability by querying the discovery
+  endpoint, not by being told in a letter". TD-013 retired every legacy path
+  in this repo; a consumer polling `.well-known/vxture-tools` across that
+  change would have seen **zero** difference in the response and still 404'd,
+  because the one thing that changed is the one thing the descriptor cannot
+  express. The discovery mechanism was exactly the tool that should have made
+  that rename self-announcing, and it structurally could not.
+- **Why this is not fixed in this repo**: adding a non-standard `endpoint`
+  field to Atlas's descriptors would be inventing a protocol extension inside
+  a product repo, which CLAUDE.md forbids ("fix the standard in the platform
+  repo first, then mirror it here"). The descriptor shape is the platform
+  line's to change.
+- **Recovery condition**: `product_210_tool-protocol.md` §4.1 gains an
+  endpoint/path field (plus a `protocol_version` bump per its own §122
+  evolution rule); Atlas then mirrors it in `discovery.types.ts` +
+  `tool-descriptors.ts`, which is a small additive change here.
+- **Report to platform line**: proposal filed as `vxture-platform`#159, with the TD-013 path retirement as the motivating evidence.
