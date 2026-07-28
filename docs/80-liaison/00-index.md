@@ -35,6 +35,8 @@ issue state is the source of truth, not this row.
 | [#38](https://github.com/vxture/vxture-atlas/issues/38) | atlas | A2 real parse provider | Open - product/cost decision |
 | [#39](https://github.com/vxture/vxture-atlas/issues/39) | atlas | A3 real rerank provider | Open - product/cost decision |
 | [#40](https://github.com/vxture/vxture-atlas/issues/40) | atlas | `/model-platform/chat` -> `/v1/chat` rename | Open - blocked on `platform`#144 |
+| [#52](https://github.com/vxture/vxture-atlas/issues/52) | atlas | M-1 operator-token verification on admin routes (mgmt-plane contract batch B) | Open - platform half landed, atlas half not started |
+| [#60](https://github.com/vxture/vxture-atlas/pull/60) | atlas | `model-platform` route-prefix cleanup (TD-013): admin -> `/capability`, health dedup | Open PR - full path map now `docs/20-specs/10-http-surface.md`; see `platform`#144/#148 comments for cross-repo follow-ups |
 | [#41](https://github.com/vxture/vxture-atlas/issues/41) | atlas | Tenant-scoped model list | Closed - shipped, deployed, confirmed live |
 | [#42](https://github.com/vxture/vxture-atlas/issues/42) | atlas | taskProfile routing | Closed - shipped, deployed, confirmed live |
 | [#43](https://github.com/vxture/vxture-atlas/issues/43) | atlas | Capability discovery endpoint | Closed - shipped (TD-008) |

@@ -25,22 +25,22 @@ export class HealthController {
     private readonly health: ModelPlatformHealthService,
   ) {}
 
+  // vxture-atlas naming plan (2026-07-28): live/ready/diagnostics used to be
+  // duplicated under both bare /healthz and /model-platform/health/* - the
+  // latter carried the leftover package-name prefix and was never anything
+  // but a second name for the same three checks. Collapsed to one bare set;
+  // /status (below) is unaffected since it never carried the prefix.
   @Get("healthz")
-  check(): ModelPlatformLiveResponse {
-    return this.health.live();
-  }
-
-  @Get("model-platform/health/live")
   live(): ModelPlatformLiveResponse {
     return this.health.live();
   }
 
-  @Get("model-platform/health/ready")
+  @Get("readyz")
   ready(): Promise<ModelPlatformReadyResponse> {
     return this.health.ready();
   }
 
-  @Get("model-platform/health/diagnostics")
+  @Get("internal/diagnostics")
   @UseGuards(InternalDiagnosticsGuard)
   diagnostics(): Promise<ModelPlatformReadyResponse> {
     return this.health.diagnostics();

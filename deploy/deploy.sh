@@ -85,14 +85,14 @@ cmd_start() {
 cmd_verify() {
   local tries=0
   until [ "$tries" -ge 20 ]; do
-    if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/model-platform/health/live" >/dev/null 2>&1; then
+    if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/healthz" >/dev/null 2>&1; then
       log "verify OK (health 200)"
       return 0
     fi
     tries=$((tries + 1))
     sleep 3
   done
-  log "verify FAILED: /model-platform/health/live not healthy"
+  log "verify FAILED: /healthz not healthy"
   compose ps
   exit 1
 }

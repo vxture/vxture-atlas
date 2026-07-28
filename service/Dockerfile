@@ -21,7 +21,7 @@ RUN pnpm --filter @vxture/service-model-platform run build
 
 FROM base AS runtime
 ENV NODE_ENV=production
-# docker-compose.yml's healthcheck runs wget against /model-platform/health/live -
+# docker-compose.yml's healthcheck runs wget against /healthz -
 # node:22-slim doesn't ship it, and without it the healthcheck command itself
 # fails (exec: wget not found), marking the container unhealthy regardless of
 # whether the app is actually up.

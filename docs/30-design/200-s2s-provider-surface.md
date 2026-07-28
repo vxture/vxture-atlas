@@ -112,7 +112,7 @@ karda 提出的两项消费面前置依赖（用户模型选择器需要一个"�
 - 精确 application 范围匹配优先于租户级通配 grant，和既有 `QuotaService.assertAllowed` 的
   entitlement 查找同一优先级规则,不是另一套语义。
 - 解析找不到匹配时返回 `404 TASK_PROFILE_NOT_ROUTABLE`，不是静默兜底到某个默认模型。
-- 管理面（`model-platform/admin/grants*`）的创建/更新 body 新增 `taskProfile` 字段，运营可以
+- 管理面（`capability/grants*`）的创建/更新 body 新增 `taskProfile` 字段，运营可以
   直接通过既有 grant CRUD 配置任务画像路由，不需要新的管理端点。
 
 这两项都是纯加法（新 query 参数、新可选字段、新可空列），不改变任何现有调用方的行为——

@@ -34,7 +34,18 @@ import {
 } from "./model-admin.service";
 import type { ApplicationType } from "../types/runtime.types";
 
-@Controller("model-platform/admin")
+// vxture-atlas naming plan (2026-07-28, TD-013): "model-platform" was a
+// leftover package name from the in-monorepo extraction, and "admin" now
+// collides with platform's BSS-scoped meaning
+// (product_250_management-plane-contract.md M-4 migrates this OSS
+// "capability & service" domain out of admin-bff into capconsole-bff).
+// /capability mirrors the already-decided Capability Console UI name and is
+// the target path. `model-platform/admin` stays as an additive alias -
+// admin-bff's router still calls it in production - until vxture-platform#144
+// coordinates the BFF-side switch to /capability; do not remove it
+// unilaterally. Auth model swaps from S2sAuthGuard to operator-token
+// verification per atlas#52, landing alongside/after that switch.
+@Controller(["capability", "model-platform/admin"])
 @UseGuards(S2sAuthGuard)
 export class ModelAdminController {
   constructor(
