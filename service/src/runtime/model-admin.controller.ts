@@ -39,13 +39,13 @@ import type { ApplicationType } from "../types/runtime.types";
 // collides with platform's BSS-scoped meaning
 // (product_250_management-plane-contract.md M-4 migrates this OSS
 // "capability & service" domain out of admin-bff into capconsole-bff).
-// /capability mirrors the already-decided Capability Console UI name and is
-// the target path. `model-platform/admin` stays as an additive alias -
-// admin-bff's router still calls it in production - until vxture-platform#144
-// coordinates the BFF-side switch to /capability; do not remove it
-// unilaterally. Auth model swaps from S2sAuthGuard to operator-token
-// verification per atlas#52, landing alongside/after that switch.
-@Controller(["capability", "model-platform/admin"])
+// /capability mirrors the already-decided Capability Console UI name.
+// `model-platform/admin` retired outright (no alias) - admin-bff and
+// console-bff both still call the old path as of this change and will error
+// until updated, by explicit product decision (TD-013 progress note), not a
+// deprecation-cycle oversight. Auth model swaps from S2sAuthGuard to
+// operator-token verification per atlas#52 separately.
+@Controller("capability")
 @UseGuards(S2sAuthGuard)
 export class ModelAdminController {
   constructor(

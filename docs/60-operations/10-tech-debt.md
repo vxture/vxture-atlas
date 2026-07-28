@@ -27,7 +27,7 @@ repo-split plan itself - not discovered later.
 | TD-010 | A non-UUID `tenantId`/`applicationId` reaching `model.model_grants` (a `uuid` column) crashed as an unhandled Prisma error - opaque `500`, found live via karda's first real end-to-end probe (`vxture-atlas`#47) | 2026-07-27 | closed 2026-07-27 - `ModelRegistryRepository.findBestGrant`/`findModelCodeForTaskProfile`/`listGrantedModels` now validate UUID format before querying, throwing a clean `400 INVALID_TENANT_ID`/`INVALID_APPLICATION_ID` instead; reproduced and verified against a real local Postgres before/after the fix |
 | TD-011 | TD-003b's `model_grants.task_profile` column shipped only in `00_baseline.sql` (create-once, no-op against an already-provisioned table) with no incremental migration - production never actually got the column, so every grant/taskProfile query 500'd for real (karda re-test, `vxture-atlas`#47) even after TD-010's fix | 2026-07-28 | closed 2026-07-28 - added `deploy/database/ddl/incr/01_model_grants_task_profile.sql`; also discovered and fixed `00_baseline.sql` was missing `IF NOT EXISTS` on every `CREATE TABLE`/`CREATE INDEX` (contradicting its own db-init.yml's documented "every statement is IF NOT EXISTS" assumption) - re-running `db-init apply` against an already-initialized database would have failed at the first statement, before ever reaching `incr/`; fixed all 14 tables + all indexes. Verified against a real local Postgres: reproduced the exact production state (old baseline, no column), applied the fixed baseline+97+98+incr sequence twice in a row, both clean |
 | TD-012 | `model_code` is sent verbatim as the upstream provider's `model` field (`buildOpenAiCompatibleBody`, no prefix-stripping) - a `{provider_code}/{vendor_model_name}`-prefixed code (per `vxture-platform`'s `42-model-provider-registry-plan.md` §1 convention, e.g. seeded `deepseek/deepseek-chat`) 404s against the real upstream API, confirmed live with both `doubao`/`zhipu` during `vxture-atlas`#47 testing (2026-07-28) | 2026-07-28 | workaround confirmed working 2026-07-28 - `doubao-seed-2-0-lite-260428`/`doubao-seed-2-0-pro-260215`/`glm-5.2` (bare, no prefix) all returned real `201` generations for karda's test tenant, full chain (token-exchange -> verify -> route -> grant -> upstream inference) proven end to end, `vxture-atlas`#47/`vxture-karda`#76/`vxture-platform`#145/#147 all closed. The underlying naming-convention question is still open at `vxture-platform`#152 - only the immediate blocking impact is resolved, not the convention itself |
-| TD-013 | `model-platform` was never a deliberate API namespace - a leftover package name (`@vxture/service-model-platform`) carried into route prefixes at repo-split time, applied inconsistently (health duplicated under both bare and prefixed paths) and, for the admin surface, now actively wrong given product_250's BSS/OSS split | 2026-07-28 | closed 2026-07-28 - Atlas-side rename done, see progress note; cross-repo callers (`model-runtime-client`, admin-bff) tracked separately, not blocking |
+| TD-013 | `model-platform` was never a deliberate API namespace - a leftover package name (`@vxture/service-model-platform`) carried into route prefixes at repo-split time, applied inconsistently (health duplicated under both bare and prefixed paths) and, for the admin surface, now actively wrong given product_250's BSS/OSS split | 2026-07-28 | closed 2026-07-28 - Atlas-side rename done AND legacy `model-platform/*` paths retired outright (no alias), by explicit product decision to accept cross-repo breakage over carrying a dual-path forever; see progress note for the three known callers that now 404 until updated |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -605,39 +605,42 @@ repo-split plan itself - not discovered later.
   - `/.well-known/vxture-tools` (discovery) and `/provisioning/webhook` (C3) -
     unchanged, both fixed by external cross-repo protocol contracts, not this
     repo's naming to pick.
-- **Done in this repo (2026-07-28)**: `ModelAdminController`/
-  `ProviderKeyController` moved to `capability`/`capability/provider-keys`;
-  `HealthController` collapsed to `healthz`/`readyz`/`internal/diagnostics`;
-  `docker-compose.yml` healthcheck, `deploy/deploy.sh`'s `cmd_verify`, and the
-  `Dockerfile` comment updated to match; doc references in
-  `50-deployment/00-index.md` and `30-design/200-s2s-provider-surface.md`
-  updated (historical/append-only docs - ADRs, dated workplan "done" notes,
-  archived liaison letters - left as-is, they describe state at the time
-  written, not current state).
-- **Not done here (needs the other repo)**:
-  - `vxture-platform/packages/ai/model-runtime-client` still calls
-    `/model-platform/chat` (2 literal call sites,
-    `packages/ai/model-runtime-client/src/llm/client.ts`); its only consumer
-    is `agent-server/varda`. Low blast radius, but this repo can't edit
-    `vxture-platform` unilaterally - tracked as a new item to raise on
-    `vxture-platform`#144 (which already tracks `model-runtime-client`
-    coordination for the `/v1/chat` alias).
-  - `bff/admin-bff/src/routers/model-platform.router.ts` still proxies to the
-    old `model-platform/admin/*` paths for the full registry surface
-    (providers/models/grants/price-rules/policies/quotas/usage-summaries).
-    This router is also mid-migration out of admin-bff into `capconsole-bff`
-    per product_250 M-4 batch C/D, which hasn't reached this router yet
-    (`capconsole-bff` currently only has `health`/`oidc-auth`) - the path
-    rename and the BFF-ownership move should land together on the platform
-    side, not be sequenced separately. Flagged on `vxture-platform`#148.
-  - Both legacy paths (`/model-platform/chat|models`, `/model-platform/admin/*`)
-    were deliberately **not removed** from Atlas - `runtime.controller.ts`
-    still serves `/model-platform/chat|models` as an alias (see the comment
-    there, tracked by `vxture-atlas`#40/`vxture-platform`#144), and
-    `model-admin.controller.ts`/`provider-key.controller.ts` were moved
-    outright to `/capability` since their only known caller is
-    `admin-bff`, one repo, coordinated directly rather than run as a
-    long-lived dual-path alias.
+- **Done in this repo (2026-07-28, two-part)**:
+  - Part 1: `ModelAdminController`/`ProviderKeyController` moved to
+    `capability`/`capability/provider-keys`; `HealthController` collapsed to
+    `healthz`/`readyz`/`internal/diagnostics`; `docker-compose.yml`
+    healthcheck, `deploy/deploy.sh`'s `cmd_verify`, and the `Dockerfile`
+    comment updated to match. Legacy paths initially kept as additive
+    aliases pending cross-repo coordination.
+  - Part 2 (same day, explicit product decision): the additive-alias
+    approach was overridden - **all** `model-platform/*` paths retired
+    outright, no alias, in favor of forcing the coordination rather than
+    letting a "temporary" alias become permanent (the exact failure mode
+    this entry exists to fix). `runtime.controller.ts` now only serves
+    `/v1/*`; `model-admin.controller.ts`/`provider-key.controller.ts` only
+    serve `/capability/*`. `docs/20-specs/10-http-surface.md` rewritten to
+    show only the final state, no alias rows. Doc references in
+    `50-deployment/00-index.md` and `30-design/200-s2s-provider-surface.md`
+    updated (historical/append-only docs - ADRs, dated workplan "done"
+    notes, archived liaison letters - left as-is, they describe state at
+    the time written, not current state).
+- **Breaks now, needs the other repo to fix (not this repo's write-scope)**:
+  three known callers in `vxture-platform` will 404 against Atlas until
+  updated:
+  1. `packages/ai/model-runtime-client/src/llm/client.ts` (2 call sites,
+     `/model-platform/chat`) - consumer: `agent-server/varda`.
+  2. `bff/admin-bff/src/routers/model-platform.router.ts` (29 call sites,
+     `/model-platform/admin/*`, full registry surface) - consumer: the admin
+     portal's AI/model-platform pages.
+  3. `bff/console-bff/src/routers/model-platform.router.ts` (5 call sites,
+     `/model-platform/admin/*` read-only subset: models/grants/quotas/
+     usage-summaries) - consumer: the tenant console's model-platform pages.
+  All three need their literal path strings swapped to `/v1/*` or
+  `/capability/*` per `docs/20-specs/10-http-surface.md`. No deploy-window
+  coordination needed on Atlas's side beyond not tagging a production
+  release until told to - merging to `main` does not deploy (see repo
+  branch model).
 - **Report to platform line**: `vxture-platform`#144 (model-runtime-client)
-  and #148 (admin-bff/capconsole-bff sequencing) both updated with this
-  entry's findings.
+  and #148 (admin-bff/capconsole-bff sequencing) updated with the full
+  breaking-change list, plus a dedicated `liaison`-tagged issue opened for
+  urgency (see progress note link once filed).

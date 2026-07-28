@@ -5,9 +5,12 @@ products integrating against Atlas (platform, karda, varda, future L2/L3
 callers) - link to this file from liaison issues rather than pasting a copy
 of the table, so it can't go stale in two places.
 
-Naming rationale (why `/v1`, why `/capability`, why the legacy aliases exist)
-is recorded in `docs/60-operations/10-tech-debt.md` TD-013. This file is the
-current-state table only; TD-013 is the "why".
+Naming rationale is recorded in `docs/60-operations/10-tech-debt.md` TD-013.
+This file is the current-state table only; TD-013 is the "why". As of
+2026-07-28 there are no legacy aliases anywhere in this surface - every path
+below is the only path. Older integration notes referencing
+`model-platform/chat`, `model-platform/models`, or `model-platform/admin/*`
+are stale; those paths return 404.
 
 Last verified against `service/src/**/*.controller.ts`: 2026-07-28.
 
@@ -22,12 +25,6 @@ Auth: `S2sAuthGuard` (RS256, `aud="atlas"`, platform OIDC issuer/JWKS).
 | POST | `/v1/embed` | A1 embedding |
 | POST | `/v1/rerank` | A3 rerank |
 | POST | `/v1/parse` | A2 parse - contract defined, no real provider wired yet |
-
-**Legacy alias, do not build new integrations against it**: `POST
-/model-platform/chat`, `GET /model-platform/models`. Kept only because
-`vxture-platform`'s `model-runtime-client` (consumer: `agent-server/varda`)
-still calls it. Tracked for removal at `vxture-atlas`#40 /
-`vxture-platform`#144.
 
 ## Capability plane - operator/registry surface
 
@@ -44,12 +41,6 @@ here indefinitely.
 | GET/POST/PUT | `/capability/policies[/:id[/activate\|deactivate]]` | Policy |
 | GET | `/capability/quotas`, `/capability/usage-summaries` | Read-only |
 | GET/POST | `/capability/provider-keys[/:id/rotate\|activate\|deactivate]` | Provider API key vault (TD-006, envelope-encrypted) |
-
-**Legacy alias, do not build new integrations against it**: `/model-platform/admin/*`,
-`/model-platform/admin/provider-keys*`. Kept only because `admin-bff`
-(`bff/admin-bff/src/routers/model-platform.router.ts`) still proxies here in
-production. New callers (e.g. `capconsole-bff`) should target `/capability/*`
-directly. Tracked at `vxture-platform`#144 / `#148`.
 
 ## Infra / health - unauthenticated except where noted
 
