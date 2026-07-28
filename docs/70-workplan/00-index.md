@@ -42,8 +42,24 @@ a stopgap, not Phase 3 completion; real C2/C3 wiring still needs to happen
 once `product.agent_catalog` lands.
 
 **S2S provider surface (embed/parse/rerank) - contract layer done 2026-07-24**:
-see TD-003 progress note. Real provider integration still open (product/cost
-decision).
+see TD-003 progress note. Real provider integration for A1/A2/A3 still open
+(product/cost decision) - `501 MODEL_NOT_IMPLEMENTED` stub, tracked as
+`vxture-atlas`#37/#38/#39.
+
+**A4 (chat) - real provider integration confirmed LIVE end to end
+(2026-07-28)**: added a `ZhipuProvider` adapter (Zhipu/BigModel is
+OpenAI-compatible, reuses `doubao.provider.ts`'s shared wire-format helpers)
+and fixed several real bugs found via karda's first live integration test
+against production (`vxture-atlas`#47 - see TD-010/TD-011/TD-012): a
+non-UUID `tenantId` crashing as an unhandled 500, `model_grants.task_profile`
+never actually reaching production (baseline-only, no incremental migration -
+also exposed that `00_baseline.sql` wasn't idempotent, now fixed for all 14
+tables), and `modelCode` being sent verbatim as the upstream `model` field
+(breaks the platform's `{provider_code}/{vendor_model_name}` naming
+convention for real calls - reported to `vxture-platform`#152, not resolved
+project-wide, worked around here by registering bare model IDs). Three real
+models now registered, granted, and generating for karda's test tenant:
+`doubao-seed-2-0-lite-260428`, `doubao-seed-2-0-pro-260215`, `glm-5.2`.
 
 **Platform governance update (2026-07-27)**: `product_210_tool-protocol.md`
 bumped to v1.1, adding §11 - a 7-item self-check checklist L1 providers must
@@ -130,3 +146,13 @@ e2e checklist (login -> provisioning -> gating -> consume -> invalidate
 [skipped, atlas is not an asset-face product] -> full self-rectify one-shot);
 real admin/console regression against the new network path; old
 `services/model/platform` removed from vxture-platform only after the above.
+
+**S2S consumer cutover (karda) - confirmed live 2026-07-28**: karda ran a
+real end-to-end `karda.ask` integration test against production
+(`vxture-atlas`#47, `vxture-karda`#76) - token-exchange mint -> RS256/JWKS
+verify -> route -> grant check -> real upstream inference, all three
+registered models returning real `201` generations. karda proceeding to its
+own host cutover (`ATLAS_BASE_URL` + pinned model) to take `karda.ask` live.
+This is the first real S2S consumer proving the full chain this repo's own
+admin/console regression (above) hasn't exercised yet - still open for the
+BFF/console side.
