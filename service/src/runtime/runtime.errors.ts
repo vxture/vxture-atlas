@@ -37,6 +37,9 @@ export type ModelRuntimeErrorCode =
   // be a UUID - a malformed value used to crash as an unhandled 500
   // (Postgres/Prisma UUID-cast error) instead of a clean 400.
   | "INVALID_TENANT_ID"
+  | "TENANCY_SCOPE_UNAVAILABLE"
+  | "TENANCY_SCOPE_INVALID"
+  | "INVALID_WINDOW"
   | "INVALID_APPLICATION_ID";
 
 export interface ModelRuntimeErrorResponse {

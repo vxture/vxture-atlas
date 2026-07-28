@@ -9,6 +9,8 @@ import { ModelAdminController } from "./runtime/model-admin.controller";
 import { ModelAdminService } from "./runtime/model-admin.service";
 import { MeteringService } from "./metering/metering.service";
 import { RequestLogService } from "./reqlog/request-log.service";
+import { TenancyController } from "./tenancy/tenancy.controller";
+import { TenancyService } from "./tenancy/tenancy.service";
 import { ClaudeProvider } from "./providers/claude.provider";
 import { DoubaoProvider } from "./providers/doubao.provider";
 import { ZhipuProvider } from "./providers/zhipu.provider";
@@ -43,6 +45,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     ProvisioningWebhookController,
     ProviderKeyController,
     DiscoveryController,
+    TenancyController,
   ],
   providers: [
     ModelRuntimeService,
@@ -54,6 +57,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     QuotaService,
     MeteringService,
     RequestLogService,
+    TenancyService,
     DoubaoProvider,
     ZhipuProvider,
     ClaudeProvider,

@@ -79,7 +79,7 @@ export async function withRequestLog<T>(
       ? { workspaceId: auth.workspaceId }
       : {}),
     ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
-    tenantId: request.tenantId,
+    tenantId: auth?.orgId ?? request.tenantId,
     applicationId: applicationScope.applicationId,
     applicationType: applicationScope.applicationType,
     agentId: applicationScope.agentId,

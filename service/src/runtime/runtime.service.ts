@@ -739,7 +739,7 @@ export class ModelRuntimeService {
         ? { workspaceId: auth.workspaceId }
         : {}),
       ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
-      tenantId: request.tenantId,
+      tenantId: auth?.orgId ?? request.tenantId,
       applicationId: applicationScope.applicationId,
       applicationType: applicationScope.applicationType,
       agentId: applicationScope.agentId,
@@ -786,7 +786,7 @@ export class ModelRuntimeService {
         ? { workspaceId: auth.workspaceId }
         : {}),
       ...(auth?.userId !== undefined ? { userId: auth.userId } : {}),
-      tenantId: request.tenantId,
+      tenantId: auth?.orgId ?? request.tenantId,
       applicationId: applicationScope.applicationId,
       applicationType: applicationScope.applicationType,
       agentId: applicationScope.agentId,
@@ -809,7 +809,7 @@ export class ModelRuntimeService {
 
     await this.metering.record({
       requestId,
-      tenantId: request.tenantId,
+      tenantId: auth?.orgId ?? request.tenantId,
       applicationId: applicationScope.applicationId,
       applicationType: applicationScope.applicationType,
       agentId: applicationScope.agentId,
