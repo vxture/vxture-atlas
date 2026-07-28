@@ -3,7 +3,11 @@ import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
 import { S2sAuthGuard } from "../runtime/guards/s2s-auth.guard";
 import type { S2sAuthenticatedRequest } from "../runtime/guards/s2s-auth.guard";
 import { TenancyService } from "./tenancy.service";
-import type { TenancyUsageResponse } from "./tenancy.types";
+import type {
+  TenancyGrantRow,
+  TenancyQuotaResponse,
+  TenancyUsageResponse,
+} from "./tenancy.types";
 import type { AiModelRecord } from "../types/runtime.types";
 
 /**
@@ -31,6 +35,22 @@ export class TenancyController {
   @Get("models")
   listModels(@Req() req: S2sAuthenticatedRequest): Promise<AiModelRecord[]> {
     return this.tenancy.listModels(req.s2sAuth);
+  }
+
+  /** What this workspace may call, and under what routing conditions. */
+  @Get("grants")
+  listGrants(@Req() req: S2sAuthenticatedRequest): Promise<TenancyGrantRow[]> {
+    return this.tenancy.listGrants(req.s2sAuth);
+  }
+
+  /**
+   * Entitlement from the platform's C2 envelope. `status` distinguishes
+   * "uncovered" (resolved, no coverage - expected while atlas's plan catalog
+   * is an unpublished draft) from "unavailable" (could not ask).
+   */
+  @Get("quotas")
+  quotas(@Req() req: S2sAuthenticatedRequest): Promise<TenancyQuotaResponse> {
+    return this.tenancy.quotas(req.s2sAuth);
   }
 
   @Get("usage")

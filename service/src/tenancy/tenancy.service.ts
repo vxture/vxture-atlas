@@ -2,10 +2,13 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import { ModelRegistryRepository } from "../registry/model-registry.repository";
 import { ModelRegistryService } from "../registry/model-registry.service";
+import { PlatformEntitlementClient } from "../platform/platform-entitlement.client";
 import { ModelRuntimeException } from "../runtime/runtime.errors";
 import type { S2sAuthContext } from "../runtime/guards/s2s-auth.guard";
 import type { AiModelRecord } from "../types/runtime.types";
 import type {
+  TenancyGrantRow,
+  TenancyQuotaResponse,
   TenancyScope,
   TenancyUsageResponse,
   TenancyUsageRow,
@@ -23,6 +26,8 @@ export class TenancyService {
     private readonly registry: ModelRegistryService,
     @Inject(ModelRegistryRepository)
     private readonly repository: ModelRegistryRepository,
+    @Inject(PlatformEntitlementClient)
+    private readonly entitlements: PlatformEntitlementClient,
   ) {}
 
   /**
@@ -63,6 +68,62 @@ export class TenancyService {
     return this.registry.listModelsForTenant({
       tenantId: this.resolveScopeId(auth, "workspace"),
     });
+  }
+
+  /**
+   * The workspace's own grants - what it may call, and the routing conditions
+   * attached. Operator-only fields (`reason`) are not projected.
+   */
+  async listGrants(auth: S2sAuthContext | undefined): Promise<TenancyGrantRow[]> {
+    const workspaceId = this.resolveScopeId(auth, "workspace");
+    const grants = await this.repository.listGrants({ tenantId: workspaceId });
+    return grants.map((g) => ({
+      id: g.id,
+      modelId: g.modelId,
+      applicationId: g.applicationId ?? null,
+      applicationType: (g.applicationType as string | null) ?? null,
+      agentId: g.agentId ?? null,
+      taskProfile: (g.taskProfile as string | null) ?? null,
+      priority: g.priority,
+      expiresAt: g.expiresAt ? new Date(g.expiresAt).toISOString() : null,
+      isActive: g.isActive,
+    }));
+  }
+
+  /**
+   * Entitlement, read from the platform's C2 envelope. Distinguishes
+   * "uncovered" from "unavailable" - the legacy stub this replaces could
+   * express neither, since it always returned an empty array.
+   */
+  async quotas(auth: S2sAuthContext | undefined): Promise<TenancyQuotaResponse> {
+    const workspaceId = this.resolveScopeId(auth, "workspace");
+    const outcome = await this.entitlements.resolve(workspaceId);
+
+    if (outcome.kind !== "resolved") {
+      return {
+        workspaceId,
+        tier: null,
+        bundled: false,
+        limits: {},
+        pools: [],
+        status: "unavailable",
+      };
+    }
+
+    const pools = outcome.view.quota_pools ?? [];
+    return {
+      workspaceId,
+      tier: outcome.view.tier ?? null,
+      bundled: outcome.view.bundled ?? false,
+      limits: outcome.view.limits ?? {},
+      pools: pools.map((p) => ({
+        metric: p.metric,
+        limit: p.limit,
+        remaining: p.remaining,
+        priority: p.priority,
+      })),
+      status: pools.length > 0 ? "covered" : "uncovered",
+    };
   }
 
   /**

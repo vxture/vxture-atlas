@@ -43,3 +43,48 @@ export interface TenancyUsageResponse {
    */
   source: "atlas.reqlog";
 }
+
+/**
+ * A grant as the tenant sees it: what this workspace may call and under what
+ * routing conditions. Deliberately narrower than the operator view
+ * (`/capability/grants`) - `reason` is an operator's internal justification
+ * and does not belong on a tenant-facing surface.
+ */
+export interface TenancyGrantRow {
+  id: string;
+  modelId: string;
+  applicationId: string | null;
+  applicationType: string | null;
+  agentId: string | null;
+  taskProfile: string | null;
+  priority: number;
+  expiresAt: string | null;
+  isActive: boolean;
+}
+
+/**
+ * Entitlement as the tenant sees it, read from the platform's C2 envelope -
+ * NOT from Atlas's legacy `tenant_subscription_quotas` mirror, which the DB
+ * split left as a stub returning `[]` (TD-005). Serving that would render an
+ * empty page indistinguishable from "no quota configured".
+ */
+export interface TenancyQuotaResponse {
+  workspaceId: string;
+  /** null when the platform could not be reached or is not configured. */
+  tier: string | null;
+  bundled: boolean;
+  limits: Record<string, number>;
+  pools: Array<{
+    metric: string;
+    limit: number;
+    remaining: number;
+    priority: number;
+  }>;
+  /**
+   * Why the answer looks the way it does. `uncovered` is expected today:
+   * atlas's plan catalog is an unpublished draft platform-side, so every
+   * workspace legitimately resolves with no pools - which is a very different
+   * fact from "we could not ask".
+   */
+  status: "covered" | "uncovered" | "unavailable";
+}

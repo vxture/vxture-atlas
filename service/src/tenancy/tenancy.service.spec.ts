@@ -18,14 +18,24 @@ function makeAuth(over: Partial<S2sAuthContext> = {}): S2sAuthContext {
   };
 }
 
-function makeService(over: { aggregate?: ReturnType<typeof vi.fn> } = {}) {
+function makeService(
+  over: {
+    aggregate?: ReturnType<typeof vi.fn>;
+    listGrants?: ReturnType<typeof vi.fn>;
+    resolve?: ReturnType<typeof vi.fn>;
+  } = {},
+) {
   const aggregate = over.aggregate ?? vi.fn(async () => []);
+  const listGrants = over.listGrants ?? vi.fn(async () => []);
   const listModelsForTenant = vi.fn(async () => []);
+  const resolve =
+    over.resolve ?? vi.fn(async () => ({ kind: "not-configured" }));
   const service = new TenancyService(
     { listModelsForTenant } as never,
-    { aggregateReqlogUsage: aggregate } as never,
+    { aggregateReqlogUsage: aggregate, listGrants } as never,
+    { resolve } as never,
   );
-  return { service, aggregate, listModelsForTenant };
+  return { service, aggregate, listModelsForTenant, listGrants, resolve };
 }
 
 describe("TenancyService scope resolution", () => {
@@ -121,5 +131,72 @@ describe("TenancyService.usage aggregation", () => {
     // Must never be mistaken for a billing figure - that is the platform's
     // usage_events, not this.
     expect(result.source).toBe("atlas.reqlog");
+  });
+});
+
+describe("TenancyService.listGrants", () => {
+  it("scopes to the token's workspace and omits operator-only fields", async () => {
+    const listGrants = vi.fn(async () => [
+      {
+        id: "g1",
+        modelId: "m1",
+        applicationId: null,
+        applicationType: null,
+        agentId: null,
+        taskProfile: "fast",
+        priority: 10,
+        expiresAt: null,
+        isActive: true,
+        reason: "internal operator note",
+      },
+    ]);
+    const { service } = makeService({ listGrants });
+
+    const rows = await service.listGrants(makeAuth());
+
+    expect(listGrants).toHaveBeenCalledWith({ tenantId: WS });
+    // `reason` is an operator's justification - not tenant-facing.
+    expect(rows[0]).not.toHaveProperty("reason");
+    expect(rows[0]).toMatchObject({ id: "g1", taskProfile: "fast" });
+  });
+});
+
+describe("TenancyService.quotas", () => {
+  it("reports covered with the platform's pools", async () => {
+    const resolve = vi.fn(async () => ({
+      kind: "resolved",
+      view: {
+        tier: "pro",
+        bundled: false,
+        limits: { "atlas.chat": 1000 },
+        quota_pools: [
+          { metric: "atlas.chat", limit: 1000, remaining: 400, priority: 1 },
+        ],
+      },
+    }));
+    const { service } = makeService({ resolve });
+
+    const result = await service.quotas(makeAuth());
+
+    expect(result.status).toBe("covered");
+    expect(result.tier).toBe("pro");
+    expect(result.pools).toHaveLength(1);
+  });
+
+  it("distinguishes uncovered from unavailable", async () => {
+    // The stub this replaces returned [] for both, making "no plan published"
+    // indistinguishable from "platform unreachable".
+    const uncovered = makeService({
+      resolve: vi.fn(async () => ({
+        kind: "resolved",
+        view: { tier: null, bundled: false, limits: {}, quota_pools: [] },
+      })),
+    });
+    const unavailable = makeService({
+      resolve: vi.fn(async () => ({ kind: "unreachable", reason: "ETIMEDOUT" })),
+    });
+
+    expect((await uncovered.service.quotas(makeAuth())).status).toBe("uncovered");
+    expect((await unavailable.service.quotas(makeAuth())).status).toBe("unavailable");
   });
 });
