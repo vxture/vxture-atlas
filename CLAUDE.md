@@ -146,6 +146,16 @@ authoritative ruleset is `docs/50-deployment/rebuild/main-ruleset.json`.
 five contexts - renaming a job breaks branch protection. Never remove a check
 from the required set.
 
+**`bypass_actors` MUST stay empty.** Until 2026-07-28 the ruleset carried
+`RepositoryRole 5` (repo admin) with `bypass_mode: "always"`, which made every
+rule above advisory for admins - a direct `git push origin main` from an admin
+account succeeded silently, contradicting this file's own "direct push is
+BLOCKED" claim. Found the hard way: a push that should have been rejected went
+through (TD-020). Anyone with admin can still break glass by editing the
+ruleset - the difference is that doing so is a recorded config change instead
+of an invisible per-push exemption. Do not re-add a bypass actor to make an
+urgent merge easier.
+
 ## CI/CD pipeline
 
 `ci.yml` triggers on PRs to `main` and on `push:main`; it does NOT deploy.
