@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 
 import { renderStatusPage } from "./status-page";
-import type { ModelPlatformReadyResponse } from "./health.service";
+import type { AtlasReadyResponse } from "./health.service";
 
 function makeReady(
-  overrides: Partial<ModelPlatformReadyResponse> = {},
-): ModelPlatformReadyResponse {
+  overrides: Partial<AtlasReadyResponse> = {},
+): AtlasReadyResponse {
   return {
-    service: "model-platform",
+    service: "atlas",
     product: "vxture",
     version: "v0.1.1",
     gitSha: "baa74d8",
@@ -32,7 +32,7 @@ describe("renderStatusPage", () => {
     expect(html).toContain("v0.1.1");
     expect(html).toContain("baa74d8");
     expect(html).toContain("production");
-    expect(html).toContain("model-platform");
+    expect(html).toContain("atlas");
   });
 
   it("renders every check with its status", () => {

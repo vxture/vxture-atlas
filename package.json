@@ -8,8 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm --filter @vxture/service-model-platform build",
-    "type-check:all": "pnpm --filter @vxture/service-model-platform type-check",
+    "build": "pnpm --filter @atlas/service build",
+    "type-check:all": "pnpm --filter @atlas/service type-check",
     "lint": "pnpm --recursive --if-present lint",
     "lint:docs-numbering": "node scripts/guardrails/check-docs-numbering.mjs --strict",
     "lint:data-design": "node scripts/guardrails/check-data-architecture.mjs --strict",

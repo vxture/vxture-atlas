@@ -1,6 +1,6 @@
 /**
  * health.service.spec.ts - 模型平台健康检查测试
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category test
  * @author AI-Generated
@@ -9,7 +9,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ModelPlatformHealthService } from "./health.service";
+import { AtlasHealthService } from "./health.service";
 import type { ModelRegistryRepository } from "../registry/model-registry.repository";
 import type {
   AiModelRecord,
@@ -95,23 +95,23 @@ function makeUsageSummary(): TenantUsageSummaryRecord {
   };
 }
 
-describe("ModelPlatformHealthService", () => {
+describe("AtlasHealthService", () => {
   afterEach(() => {
     delete process.env["MODEL_PLATFORM_TEST_KEY"];
   });
 
   it("returns liveness without dependency checks", () => {
-    const service = new ModelPlatformHealthService(makeRepository());
+    const service = new AtlasHealthService(makeRepository());
 
     expect(service.live()).toMatchObject({
       status: "ok",
-      service: "model-platform",
+      service: "atlas",
     });
   });
 
   it("returns ready when all dependency checks pass", async () => {
     process.env["MODEL_PLATFORM_TEST_KEY"] = "configured";
-    const service = new ModelPlatformHealthService(makeRepository());
+    const service = new AtlasHealthService(makeRepository());
 
     const result = await service.ready();
 
@@ -129,7 +129,7 @@ describe("ModelPlatformHealthService", () => {
   });
 
   it("returns blocked when provider key references are missing", async () => {
-    const service = new ModelPlatformHealthService(makeRepository());
+    const service = new AtlasHealthService(makeRepository());
 
     const result = await service.ready();
 
@@ -141,7 +141,7 @@ describe("ModelPlatformHealthService", () => {
   });
 
   it("returns blocked when database connectivity fails", async () => {
-    const service = new ModelPlatformHealthService(
+    const service = new AtlasHealthService(
       makeRepository({
         checkDatabaseConnectivity: vi.fn(async () => {
           throw new Error("database unavailable");
@@ -159,7 +159,7 @@ describe("ModelPlatformHealthService", () => {
   });
 
   it("returns blocked when model registry is empty", async () => {
-    const service = new ModelPlatformHealthService(
+    const service = new AtlasHealthService(
       makeRepository({
         listActiveModels: vi.fn(async () => []),
       }),

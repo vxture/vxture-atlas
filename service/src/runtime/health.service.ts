@@ -1,6 +1,6 @@
 /**
  * health.service.ts - 模型平台健康检查编排
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category service
  * @author AI-Generated
@@ -29,10 +29,10 @@ export interface HealthCheckResult {
 }
 
 // Liveness + identity per standard 025.
-export type ModelPlatformLiveResponse = HealthLiveResponse;
+export type AtlasLiveResponse = HealthLiveResponse;
 
 // Readiness = identity block + per-dependency checks (standard 025 §3).
-export interface ModelPlatformReadyResponse extends ServiceIdentity {
+export interface AtlasReadyResponse extends ServiceIdentity {
   status: ReadinessStatus;
   checks: {
     database: HealthCheckResult;
@@ -44,20 +44,20 @@ export interface ModelPlatformReadyResponse extends ServiceIdentity {
 }
 
 @Injectable()
-export class ModelPlatformHealthService {
+export class AtlasHealthService {
   constructor(
     @Inject(ModelRegistryRepository)
     private readonly repository: ModelRegistryRepository,
   ) {}
 
-  live(): ModelPlatformLiveResponse {
+  live(): AtlasLiveResponse {
     return buildHealthIdentity({
-      service: "model-platform",
+      service: "atlas",
       product: "vxture",
     });
   }
 
-  async ready(): Promise<ModelPlatformReadyResponse> {
+  async ready(): Promise<AtlasReadyResponse> {
     const [database, modelRegistry, quotaRead, usageSummaryRead] =
       await Promise.all([
         this.checkDatabase(),
@@ -71,7 +71,7 @@ export class ModelPlatformHealthService {
         : this.checkProviderKeys(modelRegistry.models as AiModelRecord[]);
 
     return {
-      ...serviceIdentity({ service: "model-platform", product: "vxture" }),
+      ...serviceIdentity({ service: "atlas", product: "vxture" }),
       status: resolveReadinessStatus([
         database,
         modelRegistry,
@@ -89,7 +89,7 @@ export class ModelPlatformHealthService {
     };
   }
 
-  diagnostics(): Promise<ModelPlatformReadyResponse> {
+  diagnostics(): Promise<AtlasReadyResponse> {
     return this.ready();
   }
 

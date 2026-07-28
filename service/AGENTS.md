@@ -1,4 +1,4 @@
-# @vxture/service-model-platform
+# @atlas/service
 
 > 上下文导航指针 | 完整文档在 `docs/` 体系
 

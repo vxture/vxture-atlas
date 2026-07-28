@@ -4,7 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { ModelPlatformModule } from "./model-platform.module";
+import { AtlasModule } from "./atlas.module";
 import { prisma } from "./prisma";
 
 async function bootstrap(): Promise<void> {
@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
   // verify its HMAC signature over the exact raw request bytes, not a
   // re-serialized JSON.stringify(parsedBody) (docs/30-design/identity/080-rp-integration.md
   // section 4 step 1). Nest/Express exposes this as req.rawBody when enabled.
-  const app = await NestFactory.create(ModelPlatformModule, { rawBody: true });
+  const app = await NestFactory.create(AtlasModule, { rawBody: true });
   app.enableCors();
 
   const port = Number(process.env.MODEL_PLATFORM_PORT ?? 3100);

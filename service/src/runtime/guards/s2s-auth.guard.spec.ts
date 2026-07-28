@@ -1,6 +1,6 @@
 /**
  * s2s-auth.guard.spec.ts - S2S token 校验测试 (product_210 §3.3)
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category test
  * @author AI-Generated

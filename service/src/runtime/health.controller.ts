@@ -1,6 +1,6 @@
 /**
  * health.controller.ts - 模型平台健康检查入口
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category controller
  * @author AI-Generated
@@ -11,9 +11,9 @@ import { Controller, Get, Inject, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 
 import {
-  ModelPlatformHealthService,
-  type ModelPlatformLiveResponse,
-  type ModelPlatformReadyResponse,
+  AtlasHealthService,
+  type AtlasLiveResponse,
+  type AtlasReadyResponse,
 } from "./health.service";
 import { InternalDiagnosticsGuard } from "./guards/internal-diagnostics.guard";
 import { renderStatusPage } from "./status-page";
@@ -21,8 +21,8 @@ import { renderStatusPage } from "./status-page";
 @Controller()
 export class HealthController {
   constructor(
-    @Inject(ModelPlatformHealthService)
-    private readonly health: ModelPlatformHealthService,
+    @Inject(AtlasHealthService)
+    private readonly health: AtlasHealthService,
   ) {}
 
   // vxture-atlas naming plan (2026-07-28): live/ready/diagnostics used to be
@@ -31,18 +31,18 @@ export class HealthController {
   // but a second name for the same three checks. Collapsed to one bare set;
   // /status (below) is unaffected since it never carried the prefix.
   @Get("healthz")
-  live(): ModelPlatformLiveResponse {
+  live(): AtlasLiveResponse {
     return this.health.live();
   }
 
   @Get("readyz")
-  ready(): Promise<ModelPlatformReadyResponse> {
+  ready(): Promise<AtlasReadyResponse> {
     return this.health.ready();
   }
 
   @Get("internal/diagnostics")
   @UseGuards(InternalDiagnosticsGuard)
-  diagnostics(): Promise<ModelPlatformReadyResponse> {
+  diagnostics(): Promise<AtlasReadyResponse> {
     return this.health.diagnostics();
   }
 

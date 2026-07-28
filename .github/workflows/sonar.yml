@@ -54,10 +54,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
 
       - name: Generate Prisma client
-        run: pnpm --filter @vxture/service-model-platform db:generate
+        run: pnpm --filter @atlas/service db:generate
 
       - name: Run tests (coverage)
-        run: pnpm --filter @vxture/service-model-platform test:coverage
+        run: pnpm --filter @atlas/service test:coverage
 
       - name: SonarQube Scan
         continue-on-error: true

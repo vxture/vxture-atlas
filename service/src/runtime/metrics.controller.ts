@@ -1,6 +1,6 @@
 /**
  * metrics.controller.ts - 模型平台指标抓取入口
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category controller
  * @author AI-Generated

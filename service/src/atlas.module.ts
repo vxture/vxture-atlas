@@ -3,7 +3,7 @@ import { Module } from "@nestjs/common";
 import { ModelRuntimeController } from "./runtime/runtime.controller";
 import { ModelRuntimeService } from "./runtime/runtime.service";
 import { HealthController } from "./runtime/health.controller";
-import { ModelPlatformHealthService } from "./runtime/health.service";
+import { AtlasHealthService } from "./runtime/health.service";
 import { MetricsController } from "./runtime/metrics.controller";
 import { ModelAdminController } from "./runtime/model-admin.controller";
 import { ModelAdminService } from "./runtime/model-admin.service";
@@ -45,7 +45,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
   ],
   providers: [
     ModelRuntimeService,
-    ModelPlatformHealthService,
+    AtlasHealthService,
     ModelAdminService,
     ModelRegistryRepository,
     ModelRegistryService,
@@ -77,4 +77,4 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     ProviderKeyService,
   ],
 })
-export class ModelPlatformModule {}
+export class AtlasModule {}

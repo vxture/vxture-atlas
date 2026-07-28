@@ -1,4 +1,4 @@
-export * from "./model-platform.module";
+export * from "./atlas.module";
 export * from "./runtime/runtime.controller";
 export * from "./runtime/runtime.service";
 export * from "./runtime/model-admin.controller";

@@ -9,5 +9,5 @@ vxture-platform, not a copy). Once it lands, this directory should carry:
   platform repo (`docs/40-implementation/packages/services/40-model-platform.md`
   and `docs/40-implementation/packages/ai/10-model-runtime-client.md` for the
   consumer-side client that stays in vxture-platform).
-- Dev setup (`pnpm install`, `pnpm --filter @vxture/service-model-platform dev`).
+- Dev setup (`pnpm install`, `pnpm --filter @atlas/service dev`).
 - The request contract (`ChatRequest` etc.) once it is this repo's to own.

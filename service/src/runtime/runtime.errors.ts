@@ -1,6 +1,6 @@
 /**
  * runtime.errors.ts - Model Runtime 结构化错误
- * @package @vxture/service-model-platform
+ * @package @atlas/service
  * @layer Domain
  * @category Runtime
  *

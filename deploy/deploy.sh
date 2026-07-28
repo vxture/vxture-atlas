@@ -84,9 +84,11 @@ cmd_start() {
 
 cmd_verify() {
   local tries=0
+  local payload=""
   until [ "$tries" -ge 20 ]; do
-    if docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/healthz" >/dev/null 2>&1; then
+    if payload="$(docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/healthz" 2>/dev/null)"; then
       log "verify OK (health 200)"
+      verify_identity "$payload"
       return 0
     fi
     tries=$((tries + 1))
@@ -95,6 +97,36 @@ cmd_verify() {
   log "verify FAILED: /healthz not healthy"
   compose ps
   exit 1
+}
+
+# Standard 025 section 7 item 5: a 200 alone is not a passing deploy - the
+# identity block must carry real build provenance, not the honest-fallback
+# placeholders. TD-014 shipped for months behind a green `verify` because
+# this was never checked; a warn (not a hard fail) keeps a genuine local/
+# untagged build deployable while making the regression impossible to miss.
+verify_identity() {
+  local payload="$1"
+  local placeholders=""
+  case "$payload" in
+    *'"version":"dev"'*)      placeholders="${placeholders} version=dev" ;;
+  esac
+  case "$payload" in
+    *'"gitSha":"unknown"'*)   placeholders="${placeholders} gitSha=unknown" ;;
+  esac
+  case "$payload" in
+    *'"buildTime":"unknown"'*) placeholders="${placeholders} buildTime=unknown" ;;
+  esac
+  case "$payload" in
+    *'"stage":"dev"'*)        placeholders="${placeholders} stage=dev" ;;
+  esac
+
+  if [ -n "$placeholders" ]; then
+    log "WARNING: health identity still on fallback values ->${placeholders}"
+    log "  build provenance did not reach the image (standard 025 s4/s7, TD-014)"
+    log "  the running build is NOT identifiable from the service itself"
+  else
+    log "verify OK (build provenance present)"
+  fi
 }
 
 cmd_prune() {
