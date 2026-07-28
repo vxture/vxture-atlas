@@ -52,6 +52,14 @@ GRANT UPDATE (provider_id, model_name, description, description_key, endpoint_ur
 -- model_grants: model_id / tenant_id / application_id / application_type are the
 -- grant's identity - changing any of them would silently re-point an existing
 -- grant at a different model/tenant/application rather than creating a new one.
+-- task_profile intentionally NOT in this base whitelist: on an already-existing
+-- production table (00_baseline.sql's CREATE TABLE IF NOT EXISTS is a no-op
+-- there), granting UPDATE on a column that doesn't exist yet would fail before
+-- incr/ ever runs to add it - same hazard as the index in 00_baseline.sql, see
+-- that file's comment. Granted instead by
+-- deploy/database/ddl/incr/01_model_grants_task_profile.sql, right after its
+-- ALTER TABLE ADD COLUMN, which is safe for both a fresh install (runs after
+-- CREATE TABLE) and an existing one (runs after the ALTER TABLE).
 REVOKE UPDATE ON model.model_grants FROM atlas_svc;
 GRANT UPDATE (priority, is_active, reason, expires_at, updated_by, updated_at, deleted_at)
   ON model.model_grants TO atlas_svc;
