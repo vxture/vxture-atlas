@@ -914,4 +914,10 @@ repo-split plan itself - not discovered later.
 - **Remaining gap, reported not worked around**: the governance standard has
   no sanctioned path for *recurring* DB maintenance - only manually-approved
   one-off runs. Today that means someone must trigger db-init roughly twice a
-  year (12-month runway, warn at 2). Raised with the platform line.
+  year (12-month runway, warn at 2). Raised as `vxture-platform`#164, which
+  proposes the standard grow a third category - *sanctioned recurring
+  maintenance* - alongside "deploy" and "authorized structure change": a
+  scheduled auditable path restricted to a pre-approved set of idempotent
+  operations, so the operation set is approved once instead of every run.
+  Left to the platform line to decide once for every repo with partitioned
+  tables, rather than each inventing its own mechanism.

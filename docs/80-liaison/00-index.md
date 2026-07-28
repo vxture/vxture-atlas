@@ -49,6 +49,7 @@ issue state is the source of truth, not this row.
 | [#152](https://github.com/vxture/vxture-platform/issues/152) | platform | `modelCode` provider-prefix breaks real upstream calls | Open - options laid out, not yet decided |
 | [#156](https://github.com/vxture/vxture-platform/issues/156) | platform | Actionable checklist: update model-runtime-client/admin-bff/console-bff to `/v1`\|`/capability` before next Atlas deploy | Open - urgent |
 | [#159](https://github.com/vxture/vxture-platform/issues/159) | platform | product_210 §4.1 `ToolDescriptor` has no endpoint/path field - discovery can't announce a path change (TD-015) | Open - proposal, awaiting platform decision |
+| [#164](https://github.com/vxture/vxture-platform/issues/164) | platform | Governance gap: no sanctioned path for recurring DB maintenance (TD-018) | Open - proposal, awaiting platform decision |
 | [karda#70](https://github.com/vxture/vxture-karda/issues/70) | karda | Atlas's reply to letter 140 | Closed |
 | [karda#72](https://github.com/vxture/vxture-karda/issues/72) | karda | Model-selection UX direction confirmation | Closed - both modes, phased, taskProfile first |
 | [karda#76](https://github.com/vxture/vxture-karda/issues/76) | karda | karda.ask host cutover tracking | Closed - real generation confirmed, cutover proceeding |
