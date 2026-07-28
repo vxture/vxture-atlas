@@ -727,4 +727,4 @@ repo-split plan itself - not discovered later.
   endpoint/path field (plus a `protocol_version` bump per its own §122
   evolution rule); Atlas then mirrors it in `discovery.types.ts` +
   `tool-descriptors.ts`, which is a small additive change here.
-- **Report to platform line**: proposal filed with this incident as evidence.
+- **Report to platform line**: proposal filed as `vxture-platform`#159, with the TD-013 path retirement as the motivating evidence.
