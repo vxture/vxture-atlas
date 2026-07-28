@@ -38,7 +38,8 @@ export interface S2sAuthContext {
   callerProductCode: string;
   mode: "obo" | "service";
   scope: string;
-  orgId?: string;
+  /** Tenant (personal or organization) - see the claim note in verifyS2sToken. */
+  tenantId?: string;
   workspaceId?: string;
   userId?: string;
   jti?: string;
@@ -87,14 +88,24 @@ export async function verifyS2sToken(
     });
   }
 
-  const orgId = payload["org_id"];
+  // Tenancy identity. The platform's data model calls this a **tenant**
+  // (`tenancy.tenants.type CHECK(personal/organization)`) and auto-creates a
+  // `personal` tenant for every user, so "org" names only one of the two
+  // kinds and excludes the common case. The wire claim is still `org_id`
+  // today and is minted nullable (`org_id: req.orgId ?? null` in auth-bff's
+  // token-exchange, sourced from `active_org`), unlike `workspace_id` which
+  // is validated as required.
+  //
+  // Prefer a `tenant_id` claim and fall back to `org_id`, so the platform can
+  // rename without a coordinated deploy on this side. See vxture-atlas#71.
+  const tenantId = payload["tenant_id"] ?? payload["org_id"];
   const workspaceId = payload["workspace_id"];
 
   return {
     callerProductCode,
     mode,
     scope: typeof payload["scope"] === "string" ? payload["scope"] : "",
-    ...(typeof orgId === "string" ? { orgId } : {}),
+    ...(typeof tenantId === "string" ? { tenantId } : {}),
     ...(typeof workspaceId === "string" ? { workspaceId } : {}),
     ...(typeof payload.sub === "string" ? { userId: payload.sub } : {}),
     ...(typeof payload.jti === "string" ? { jti: payload.jti } : {}),

@@ -31,14 +31,16 @@ export class TenancyService {
    * its token does not carry gets a 403, not someone else's data.
    */
   private resolveScopeId(auth: S2sAuthContext | undefined, scope: TenancyScope): string {
-    const claim = scope === "tenant" ? auth?.orgId : auth?.workspaceId;
-    const claimName = scope === "tenant" ? "org_id" : "workspace_id";
+    const claim = scope === "tenant" ? auth?.tenantId : auth?.workspaceId;
+    const claimName = scope === "tenant" ? "tenant_id/org_id" : "workspace_id";
 
     if (!claim?.trim()) {
       throw new ModelRuntimeException(
         HttpStatus.FORBIDDEN,
         "TENANCY_SCOPE_UNAVAILABLE",
-        `token carries no ${claimName} claim, so a ${scope}-scoped read cannot be authorized - request a token minted for the ${scope} you want to read`,
+        scope === "tenant"
+          ? "this token carries no tenant identity (no tenant_id/org_id claim), so a tenant-level rollup cannot be authorized. The platform mints org_id only when an organization is active, so personal tenants currently have none - use scope=workspace, which is always available. Tracked in vxture-atlas#71."
+          : `token carries no ${claimName} claim, so a ${scope}-scoped read cannot be authorized`,
       );
     }
 
