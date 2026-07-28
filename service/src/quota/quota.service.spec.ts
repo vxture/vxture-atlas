@@ -11,8 +11,38 @@ import type {
   AiModelGrantRecord,
   AiModelRecord,
   ChatRequest,
-  TenantSubscriptionQuotaRecord,
 } from "../types/runtime.types";
+
+function makeGrant(overrides: Partial<AiModelGrantRecord> = {}): AiModelGrantRecord {
+  return {
+    id: "grant-1",
+    modelId: "model-1",
+    tenantId: "tenant-1",
+    applicationId: null,
+    applicationType: null,
+    agentId: null,
+    taskProfile: null,
+    priority: 100,
+    reason: null,
+    expiresAt: null,
+    isActive: true,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
+function makeRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
+  return {
+    modelCode: "gpt-4o",
+    messages: [],
+    tenantId: "tenant-1",
+    ...overrides,
+  };
+}
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 
@@ -43,46 +73,12 @@ function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
   };
 }
 
-function makeQuota(
-  overrides: Partial<TenantSubscriptionQuotaRecord> = {},
-): TenantSubscriptionQuotaRecord {
-  return {
-    id: "quota-1",
-    tenantId: "tenant-1",
-    subscriptionId: null,
-    maxUsers: 10,
-    maxApiKeys: 5,
-    maxWorkflows: 20,
-    maxConcurrent: 5,
-    rateLimitPerMinute: 60,
-    periodTokens: 1_000_000n,
-    quotaCycle: "monthly",
-    allowedModels: [],
-    allowCustomModel: false,
-    effectiveAt: new Date("2026-01-01T00:00:00Z"),
-    expiresAt: null,
-    ...overrides,
-  };
-}
-
-// Bypass private access for Phase 1 testing
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-
 // TD-016: entitlement resolution is exercised in platform-entitlement.client.spec.ts
-// and the dedicated cases at the bottom of this file; the pre-existing tests
-// predate C2 and must keep asserting the grant/commerce behaviour unchanged, so
-// they get a client that never resolves (i.e. the old fail-open path).
+// and the dedicated cases at the bottom of this file; other tests in this file
+// don't care about C2 at all, so they get a client that never resolves.
 function stubEntitlements(over?: { resolve?: unknown }) {
   return { resolve: over?.resolve ?? (async () => ({ kind: "not-configured" })) };
 }
-
-const svc = new QuotaService(null as any, stubEntitlements() as never);
-const isModelAllowed = (
-  model: AiModelRecord,
-  quota: TenantSubscriptionQuotaRecord,
-): boolean =>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (svc as any).isModelAllowed(model, quota) as boolean;
 
 // ── toCycleMonth ──────────────────────────────────────────────────────────────
 
@@ -184,199 +180,30 @@ describe("resolveApplicationScope", () => {
   });
 });
 
-// ── isModelAllowed ────────────────────────────────────────────────────────────
-
-describe("isModelAllowed", () => {
-  describe("platform provider (non-private)", () => {
-    it("allows any model when allowedModels is empty (platform default)", () => {
-      expect(
-        isModelAllowed(makeModel({ provider: "openai" }), makeQuota()),
-      ).toBe(true);
-    });
-
-    it("denies model when allowedModels is non-empty and model is not listed", () => {
-      const quota = makeQuota({ allowedModels: ["claude-3-opus"] });
-      expect(
-        isModelAllowed(
-          makeModel({ provider: "openai", modelCode: "gpt-4o" }),
-          quota,
-        ),
-      ).toBe(false);
-    });
-
-    it("allows model explicitly listed in allowedModels", () => {
-      const quota = makeQuota({ allowedModels: ["gpt-4o"] });
-      expect(
-        isModelAllowed(
-          makeModel({ provider: "openai", modelCode: "gpt-4o" }),
-          quota,
-        ),
-      ).toBe(true);
-    });
-
-    it("allows doubao model explicitly listed even when other models are present", () => {
-      const quota = makeQuota({
-        allowedModels: ["doubao-pro", "claude-3-opus"],
-      });
-      expect(
-        isModelAllowed(
-          makeModel({ provider: "doubao", modelCode: "doubao-pro" }),
-          quota,
-        ),
-      ).toBe(true);
-    });
-  });
-
-  describe("private provider", () => {
-    it("denies when allowCustomModel=false and model not in allowedModels", () => {
-      const model = makeModel({ provider: "private", modelCode: "my-llm" });
-      expect(
-        isModelAllowed(model, makeQuota({ allowCustomModel: false })),
-      ).toBe(false);
-    });
-
-    it("allows when allowCustomModel=true", () => {
-      const model = makeModel({ provider: "private", modelCode: "my-llm" });
-      expect(isModelAllowed(model, makeQuota({ allowCustomModel: true }))).toBe(
-        true,
-      );
-    });
-
-    it("allows when model is explicitly listed even if allowCustomModel=false", () => {
-      const model = makeModel({ provider: "private", modelCode: "my-llm" });
-      const quota = makeQuota({
-        allowCustomModel: false,
-        allowedModels: ["my-llm"],
-      });
-      expect(isModelAllowed(model, quota)).toBe(true);
-    });
-
-    it('treats "custom" as a private provider — denied without allowCustomModel', () => {
-      const model = makeModel({ provider: "custom", modelCode: "local-model" });
-      expect(
-        isModelAllowed(model, makeQuota({ allowCustomModel: false })),
-      ).toBe(false);
-    });
-
-    it('treats "custom" as a private provider — allowed with allowCustomModel', () => {
-      const model = makeModel({ provider: "custom", modelCode: "local-model" });
-      expect(isModelAllowed(model, makeQuota({ allowCustomModel: true }))).toBe(
-        true,
-      );
-    });
-
-    it('treats "self-hosted" as a private provider — denied without allowCustomModel', () => {
-      const model = makeModel({
-        provider: "self-hosted",
-        modelCode: "on-prem",
-      });
-      expect(
-        isModelAllowed(model, makeQuota({ allowCustomModel: false })),
-      ).toBe(false);
-    });
-
-    it('treats "self-hosted" as a private provider — allowed with allowCustomModel', () => {
-      const model = makeModel({
-        provider: "self-hosted",
-        modelCode: "on-prem",
-      });
-      expect(isModelAllowed(model, makeQuota({ allowCustomModel: true }))).toBe(
-        true,
-      );
-    });
-  });
-});
-
-// ── assertAllowed fail-open (TD-002/TD-005) ──────────────────────────────────
-
-function makeGrant(overrides: Partial<AiModelGrantRecord> = {}): AiModelGrantRecord {
-  return {
-    id: "grant-1",
-    modelId: "model-1",
-    tenantId: "tenant-1",
-    applicationId: null,
-    applicationType: null,
-    agentId: null,
-    taskProfile: null,
-    priority: 100,
-    reason: null,
-    expiresAt: null,
-    isActive: true,
-    createdBy: null,
-    updatedBy: null,
-    createdAt: new Date("2026-01-01T00:00:00Z"),
-    updatedAt: new Date("2026-01-01T00:00:00Z"),
-    deletedAt: null,
-    ...overrides,
-  };
-}
-
-function makeRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
-  return {
-    modelCode: "gpt-4o",
-    messages: [],
-    tenantId: "tenant-1",
-    ...overrides,
-  };
-}
-
+// TD-002/TD-005 (2026-07-28): this used to test a second quota layer
+// (subscription token quota + model-allowlist) sourced from
+// findCurrentSubscriptionQuota/findUsageSummary. Both were removed as
+// unreachable dead code - they always returned null (stubs left over from
+// the DB split; the backing tables never existed in Atlas's own database),
+// so every call fell straight through to what is now the only path: the
+// grant check plus the real C2 pool check (TD-016, covered below).
 describe("QuotaService.assertAllowed", () => {
-  it("still denies when there is no grant for the model", async () => {
-    const repository = {
-      findBestGrant: vi.fn().mockResolvedValue(null),
-      findCurrentSubscriptionQuota: vi.fn(),
-    };
+  it("denies when there is no grant for the model", async () => {
+    const repository = { findBestGrant: vi.fn().mockResolvedValue(null) };
     const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     await expect(
       svc.assertAllowed(makeModel(), makeRequest()),
     ).rejects.toMatchObject({ code: "GRANT_DENIED" });
-    expect(repository.findCurrentSubscriptionQuota).not.toHaveBeenCalled();
   });
 
-  it("denies when a real quota is resolved and it is exhausted", async () => {
-    const repository = {
-      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
-      findCurrentSubscriptionQuota: vi
-        .fn()
-        .mockResolvedValue(makeQuota({ periodTokens: 0n })),
-      findUsageSummary: vi.fn().mockResolvedValue(null),
-    };
+  it("allows when a grant exists and no C2 pool is exhausted", async () => {
+    const repository = { findBestGrant: vi.fn().mockResolvedValue(makeGrant()) };
     const svc = new QuotaService(repository as never, stubEntitlements() as never);
 
     await expect(
       svc.assertAllowed(makeModel(), makeRequest()),
-    ).rejects.toMatchObject({ code: "QUOTA_EXCEEDED" });
-  });
-
-  it("allows when a real quota is resolved with remaining tokens", async () => {
-    const repository = {
-      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
-      findCurrentSubscriptionQuota: vi
-        .fn()
-        .mockResolvedValue(makeQuota({ periodTokens: 1_000n })),
-      findUsageSummary: vi.fn().mockResolvedValue(null),
-    };
-    const svc = new QuotaService(repository as never, stubEntitlements() as never);
-
-    const ctx = await svc.assertAllowed(makeModel(), makeRequest());
-    expect(ctx.remaining).toBe(1_000n);
-  });
-
-  it("fail-opens (allows) when no quota source is resolvable, without crashing", async () => {
-    const repository = {
-      findBestGrant: vi.fn().mockResolvedValue(makeGrant()),
-      findCurrentSubscriptionQuota: vi.fn().mockResolvedValue(null),
-    };
-    const svc = new QuotaService(repository as never, stubEntitlements() as never);
-
-    const ctx = await svc.assertAllowed(
-      makeModel({ provider: "private", modelCode: "my-llm" }),
-      makeRequest(),
-    );
-
-    expect(ctx.remaining).toBe(-1n);
-    expect(ctx.quota.periodTokens).toBe(-1n);
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -385,7 +212,6 @@ describe("QuotaService C2 entitlement gate (TD-016)", () => {
   const WS = "22222222-2222-4222-8222-222222222222";
   const grantRepo = {
     findBestGrant: vi.fn(async () => ({ id: "g1" })),
-    findCurrentSubscriptionQuota: vi.fn(async () => null),
   };
 
   function svcWith(resolve: () => Promise<unknown>) {
@@ -416,7 +242,7 @@ describe("QuotaService C2 entitlement gate (TD-016)", () => {
 
     await expect(
       svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
-    ).resolves.toBeTruthy();
+    ).resolves.toBeUndefined();
   });
 
   it("allows when resolved but uncovered - atlas's plan catalog is still a draft", async () => {
@@ -429,7 +255,7 @@ describe("QuotaService C2 entitlement gate (TD-016)", () => {
 
     await expect(
       svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
-    ).resolves.toBeTruthy();
+    ).resolves.toBeUndefined();
   });
 
   it("fails open when the platform is unreachable, rather than denying", async () => {
@@ -437,7 +263,7 @@ describe("QuotaService C2 entitlement gate (TD-016)", () => {
 
     await expect(
       svc.assertAllowed(model, { tenantId: WS }, { workspaceId: WS }),
-    ).resolves.toBeTruthy();
+    ).resolves.toBeUndefined();
   });
 
   it("skips the C2 read entirely when the token carries no workspace", async () => {

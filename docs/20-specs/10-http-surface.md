@@ -39,7 +39,8 @@ here indefinitely.
 | GET/POST/PUT/DELETE | `/capability/grants[/:id[/activate]]` | Tenant/application grants, incl. `taskProfile` |
 | GET/POST/PUT/DELETE | `/capability/price-rules[/:id[/activate\|deactivate]]` | Pricing |
 | GET/POST/PUT | `/capability/policies[/:id[/activate\|deactivate]]` | Policy |
-| GET | `/capability/quotas`, `/capability/usage-summaries` | Read-only |
+| GET | `/capability/quotas` | **501** (TD-002/TD-005) - the platform exposes only a single-workspace C2 read, no bulk/list endpoint, so this cannot be answered honestly; use `/tenancy/quotas` per workspace instead |
+| GET | `/capability/usage-summaries` | Read-only, currently always empty (no writer - see TD-005 progress note) |
 | GET/POST | `/capability/provider-keys[/:id/rotate\|activate\|deactivate]` | Provider API key vault (TD-006, envelope-encrypted) |
 
 ## Infra / health - unauthenticated except where noted

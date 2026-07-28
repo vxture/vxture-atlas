@@ -209,12 +209,6 @@ export interface ProviderChatResponse extends TokenUsage {
   finishReason?: FinishReason;
 }
 
-export interface QuotaCheckResult {
-  allowed: boolean;
-  reason?: string;
-  remaining: bigint;
-}
-
 export type ModelConfig = Record<string, unknown>;
 export type DecimalLike = { toString(): string };
 

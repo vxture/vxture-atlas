@@ -15,7 +15,6 @@ import type {
   ModelPolicyRecord,
   ModelPriceRuleRecord,
   ModelProviderRecord,
-  TenantSubscriptionQuotaRecord,
   TenantUsageSummaryRecord,
   UpdateAiModelGrantInput,
   UpdateAiModelInput,
@@ -473,17 +472,24 @@ export class ModelAdminService {
     return mapPolicy(policy);
   }
 
-  async listTenantQuotas(filters: {
+  /**
+   * TD-002/TD-005 (2026-07-28): honestly not implemented, not silently empty.
+   * Per-workspace quota now resolves for real via C2
+   * (`PlatformEntitlementClient`, TD-016) - but the platform exposes only
+   * `GET /platform/entitlements?workspace_id=`, no bulk/list endpoint, so
+   * there is no way to answer "every tenant's quota" in one call. Returning
+   * `[]` here would read as "no tenant has a quota", which is false; 501 says
+   * what is actually true.
+   */
+  listTenantQuotas(_filters: {
     tenantId?: string;
     includeExpired?: string;
   }): Promise<TenantQuotaAdminRecord[]> {
-    const quotas = await this.repository.listSubscriptionQuotas({
-      ...(filters.tenantId !== undefined
-        ? { tenantId: requiredString(filters.tenantId, "tenantId") }
-        : {}),
-      includeExpired: filters.includeExpired === "true",
-    });
-    return quotas.map(mapTenantQuota);
+    throw new ModelAdminException(
+      HttpStatus.NOT_IMPLEMENTED,
+      "MODEL_ADMIN_NOT_IMPLEMENTED",
+      "Bulk quota listing across tenants is not available - the platform exposes only a single-workspace entitlement read (see TD-002/TD-005)",
+    );
   }
 
   async listUsageSummaries(filters: {
@@ -996,27 +1002,6 @@ function mapPolicy(policy: ModelPolicyRecord): ModelPolicyAdminRecord {
     expiresAt: policy.expiresAt?.toISOString() ?? null,
     createdAt: policy.createdAt.toISOString(),
     updatedAt: policy.updatedAt.toISOString(),
-  };
-}
-
-function mapTenantQuota(
-  quota: TenantSubscriptionQuotaRecord,
-): TenantQuotaAdminRecord {
-  return {
-    id: quota.id,
-    tenantId: quota.tenantId,
-    subscriptionId: quota.subscriptionId,
-    maxUsers: quota.maxUsers,
-    maxApiKeys: quota.maxApiKeys,
-    maxWorkflows: quota.maxWorkflows,
-    maxConcurrent: quota.maxConcurrent,
-    rateLimitPerMinute: quota.rateLimitPerMinute,
-    periodTokens: quota.periodTokens.toString(),
-    quotaCycle: quota.quotaCycle,
-    allowedModels: quota.allowedModels,
-    allowCustomModel: quota.allowCustomModel,
-    effectiveAt: quota.effectiveAt.toISOString(),
-    expiresAt: quota.expiresAt?.toISOString() ?? null,
   };
 }
 
