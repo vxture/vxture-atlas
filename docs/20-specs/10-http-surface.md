@@ -68,8 +68,15 @@ treat as a live integration point.
 ## Tenant self-service plane
 
 Auth: `S2sAuthGuard` (`tool:atlas`). **Scope is derived from the token, never
-from the caller** - `?scope=tenant` uses the `org_id` claim, `?scope=workspace`
-(default) uses `workspace_id`. There is no request field that can widen it.
+from the caller** - `?scope=tenant` uses the `tenant_id` claim (falling back to
+the legacy `org_id`), `?scope=workspace` (default) uses `workspace_id`. There
+is no request field that can widen it.
+
+**`?scope=tenant` is not universally available yet.** The platform mints
+`org_id` only when an organization is active, while its data model gives every
+user an auto-created `personal` tenant plus a default workspace - so personal
+tenants carry no tenancy claim and get a `403 TENANCY_SCOPE_UNAVAILABLE`.
+`?scope=workspace` always works. Tracked in `vxture-atlas`#71.
 
 | Method | Path | Notes |
 |---|---|---|

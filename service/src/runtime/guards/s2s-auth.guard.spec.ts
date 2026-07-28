@@ -68,7 +68,7 @@ describe("verifyS2sToken", () => {
       callerProductCode: "varda",
       mode: "service",
       scope: "tool:atlas",
-      orgId: "org_1",
+      tenantId: "org_1",
       workspaceId: "ws_1",
       userId: undefined,
       jti: undefined,
@@ -182,5 +182,39 @@ describe("verifyS2sToken", () => {
     await expect(
       verifyS2sToken(token, { jwks, issuer: ISSUER, audience: AUDIENCE }),
     ).rejects.toThrow();
+  });
+
+  // vxture-atlas#71: the platform's data model calls this a tenant
+  // (personal|organization) and auto-creates a personal tenant + default
+  // workspace per user, but the wire claim is `org_id`, minted only when an
+  // organization is active. Accept both so the rename needs no coordinated
+  // deploy, and prove the personal-tenant case degrades rather than crashes.
+  it("prefers a tenant_id claim over the legacy org_id", async () => {
+    const token = await sign({
+      act: { sub: "console" },
+      mode: "service",
+      scope: "tool:atlas",
+      tenant_id: "tenant_new",
+      org_id: "org_legacy",
+      workspace_id: "ws_1",
+    });
+
+    const ctx = await verifyS2sToken(token, { jwks, issuer: ISSUER, audience: AUDIENCE });
+
+    expect(ctx.tenantId).toBe("tenant_new");
+  });
+
+  it("leaves tenantId undefined when neither claim is present (personal tenant today)", async () => {
+    const token = await sign({
+      act: { sub: "console" },
+      mode: "service",
+      scope: "tool:atlas",
+      workspace_id: "ws_1",
+    });
+
+    const ctx = await verifyS2sToken(token, { jwks, issuer: ISSUER, audience: AUDIENCE });
+
+    expect(ctx.tenantId).toBeUndefined();
+    expect(ctx.workspaceId).toBe("ws_1");
   });
 });

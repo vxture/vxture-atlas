@@ -12,7 +12,7 @@ function makeAuth(over: Partial<S2sAuthContext> = {}): S2sAuthContext {
     callerProductCode: "console",
     mode: "service",
     scope: "tool:atlas",
-    orgId: ORG,
+    tenantId: ORG,
     workspaceId: WS,
     ...over,
   };
@@ -65,7 +65,7 @@ describe("TenancyService scope resolution", () => {
     // token does not carry. There is no request field to fall back to.
     const { service } = makeService();
     const auth = makeAuth();
-    delete (auth as { orgId?: string }).orgId;
+    delete (auth as { tenantId?: string }).tenantId;
 
     await expect(service.usage(auth, { scope: "tenant" })).rejects.toThrow(
       ModelRuntimeException,
