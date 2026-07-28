@@ -13,6 +13,7 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
     title: "Chat completion",
     description:
       "Generation (A4): chat/completion against a registered model, with optional tool-calling and streaming.",
+    endpoint: { method: "POST", path: "/v1/chat" },
     input_schema: {
       type: "object",
       required: ["modelCode", "messages"],
@@ -45,6 +46,7 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
     title: "Text embedding",
     description:
       "A1: batch text embedding. modelCode is itself the version-pinned identifier - dimension is stable per modelCode.",
+    endpoint: { method: "POST", path: "/v1/embed" },
     input_schema: {
       type: "object",
       required: ["modelCode", "texts", "workspaceId"],
@@ -77,6 +79,7 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
     title: "Candidate rerank",
     description:
       "A3: cross-encoder rerank of up to 100 candidates against a query. Scores are globally comparable within a modelCode.",
+    endpoint: { method: "POST", path: "/v1/rerank" },
     input_schema: {
       type: "object",
       required: ["modelCode", "query", "candidates", "workspaceId"],
@@ -122,6 +125,7 @@ export const ATLAS_TOOL_DESCRIPTORS: ToolDescriptor[] = [
     title: "Document parse",
     description:
       "A2: layout/OCR/table/formula extraction over one or more page images, batched per request.",
+    endpoint: { method: "POST", path: "/v1/parse" },
     input_schema: {
       type: "object",
       required: ["modelCode", "task", "pages", "workspaceId"],

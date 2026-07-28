@@ -21,6 +21,12 @@ describe("DiscoveryController.list", () => {
       expect(tool.version).toBe("1.0.0");
       expect(tool.deprecated).toBe(false);
       expect(tool.input_schema).toBeTruthy();
+      // product_210 §4.1a (TD-015): the field that lets discovery announce a
+      // path change instead of a consumer finding out by 404.
+      expect(tool.endpoint).toMatchObject({
+        method: "POST",
+        path: expect.stringMatching(/^\/v1\//),
+      });
     }
   });
 

@@ -29,14 +29,14 @@ repo-split plan itself - not discovered later.
 | TD-012 | `model_code` is sent verbatim as the upstream provider's `model` field (`buildOpenAiCompatibleBody`, no prefix-stripping) - a `{provider_code}/{vendor_model_name}`-prefixed code (per `vxture-platform`'s `42-model-provider-registry-plan.md` §1 convention, e.g. seeded `deepseek/deepseek-chat`) 404s against the real upstream API, confirmed live with both `doubao`/`zhipu` during `vxture-atlas`#47 testing (2026-07-28) | 2026-07-28 | workaround confirmed working 2026-07-28 - `doubao-seed-2-0-lite-260428`/`doubao-seed-2-0-pro-260215`/`glm-5.2` (bare, no prefix) all returned real `201` generations for karda's test tenant, full chain (token-exchange -> verify -> route -> grant -> upstream inference) proven end to end, `vxture-atlas`#47/`vxture-karda`#76/`vxture-platform`#145/#147 all closed. The underlying naming-convention question is still open at `vxture-platform`#152 - only the immediate blocking impact is resolved, not the convention itself |
 | TD-013 | `model-platform` was never a deliberate API namespace - a leftover package name (`@vxture/service-model-platform`) carried into route prefixes at repo-split time, applied inconsistently (health duplicated under both bare and prefixed paths) and, for the admin surface, now actively wrong given product_250's BSS/OSS split | 2026-07-28 | closed 2026-07-28 - paths renamed + legacy `model-platform/*` retired outright (no alias, accepting cross-repo breakage); part 3 then renamed the service identity, metric label, package, and module family to `atlas` after self-review caught that only the paths had been done |
 | TD-014 | Build provenance never reached the image: `build.yml` passed `APP_VERSION`/`GIT_SHA`/`BUILD_TIME`/`DEPLOY_STAGE` as build-args but `service/Dockerfile` declared no matching `ARG`, so Docker silently dropped all four and production `/healthz` reported `version:"dev"`, `gitSha:"unknown"`, `stage:"dev"` - violating standard 025 §4/§6/§7, the exact failure mode that standard exists to prevent | 2026-07-28 | closed 2026-07-28 - four `ARG`+`ENV` added to the runtime stage with honest defaults; found by self-review, after the v0.1.9 deploy verification had to fall back to `docker ps` image tags because the health endpoint could not say which build was live |
-| TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | open - protocol-level gap owned by the platform line (`product_210_tool-protocol.md`), not fixable inside a product repo per CLAUDE.md's "fix the standard in the platform repo first" rule; proposal reported to platform |
+| TD-015 | `.well-known/vxture-tools` capability discovery cannot convey *where* to call: product_210 §4.1's `ToolDescriptor` shape has no endpoint/path field, so a consumer polling discovery learns names/schemas/metering but not URLs - meaning TD-013's path retirement could not self-announce and consumers found out by 404 | 2026-07-28 | closed 2026-07-28 - platform shipped the prerequisite same-day (`product_210_tool-protocol.md` §4.1a, `endpoint: {method, path}`, platform#173); Atlas mirrored it into `discovery.types.ts`/`tool-descriptors.ts` and populated it on all four descriptors |
 
 | TD-016 | `CLAUDE.md` and `.env.example` claim a C2 entitlement client (`PLATFORM_API_URL`); no such client exists - the variable is read by zero lines of code, so TD-005's quota fail-open has no mechanism by which it could ever stop being the permanent steady state | 2026-07-28 | partially closed 2026-07-28 - the client exists now (`PlatformEntitlementClient`, shared-secret path, short-TTL cache) and the quota gate can deny for the first time when the platform reports pools exhausted; enforcement of the *uncovered* case stays permissive until the platform publishes a real `atlas` plan_version, which it says is still a draft skeleton |
 | TD-017 | Atlas records no usage anywhere: `recordUsage()` logs and returns null, `upsertUsageSummary()` persists nothing, no `POST /usage/consume` client exists, and `reqlog.request_records` (deployed, partitioned, Prisma-modelled) has no writer - so the designated sole inference-metering entry point for every vxture product has captured nothing, including karda's live traffic | 2026-07-28 | closed 2026-07-28 - part 1 (own `reqlog` writes) and part 2 (C3 `POST /usage/consume` caller) both shipped. Atlas now records every served request locally and reports realized token consumption to the platform metering kernel; a served-but-unbilled request is visible as `billed_amount IS NULL` |
 | TD-018 | `reqlog.*` monthly partitions are pre-built only through 2027-01 with a DEFAULT catch-all and no roll-forward job, so from 2027-02 all rows land in DEFAULT and drop-based retention silently stops working | 2026-07-28 | closed 2026-07-28 - `reqlog.ensure_partitions`/`drop_expired_partitions` added as db-init-applied DDL (the sole sanctioned structure-change path), retention set to 6 months, and a `reqlogPartitions` readiness check added so exhaustion can no longer fail silently; verified against a real Postgres incl. the expiry drop and DEFAULT-occupancy detection |
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
-| TD-020 | Branch protection was advisory for admins: `main-ruleset.json` declared `bypass_actors: [RepositoryRole 5 (admin), bypass_mode: always]`, so a direct `git push origin main` from an admin account succeeded silently despite CLAUDE.md stating direct pushes are BLOCKED - found when exactly that push went through by accident. All four org repos (atlas/platform/karda/arda/template) carry the same bypass | 2026-07-28 | Atlas fixed 2026-07-28 (`bypass_actors: []` in the authoritative file + applied to the live ruleset); org-wide exposure reported to the platform line |
+| TD-020 | Branch protection was advisory for admins: `main-ruleset.json` declared `bypass_actors: [RepositoryRole 5 (admin), bypass_mode: always]`, so a direct `git push origin main` from an admin account succeeded silently despite CLAUDE.md stating direct pushes are BLOCKED - found when exactly that push went through by accident. All five org repos (atlas/platform/karda/arda/template) carried the same bypass | 2026-07-28 | atlas + platform closed 2026-07-28 - Atlas fixed its own live ruleset and reference file; platform's live ruleset was independently already `[]` and its reference artifact + governance doc fixed too (platform#172). Remaining exposure is karda/arda/template only - outside both atlas's and platform's write-scope, tracked per-repo (karda#82/arda#187/template#37) |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -1086,3 +1086,28 @@ repo-split plan itself - not discovered later.
   return (nothing ever read the old `QuotaContext`/`remaining` output).
   `QuotaCheckResult`/`TenantSubscriptionQuotaRecord`'s two dead consumers and
   one dead mapper function removed with it.
+
+### TD-015 - progress note (2026-07-28, closed)
+
+- **Platform shipped the prerequisite same-day**: `product_210_tool-protocol.md`
+  section 4.1a adds `endpoint: { method, path }` to every tool descriptor,
+  paired with `deprecated` for dual-listing during a path migration
+  (`platform`#173). `path` is relative to the provider's own base URL -
+  deliberately not a second place a hostname lives.
+- **Mirrored into Atlas**: `discovery.types.ts`'s `ToolDescriptor` gained the
+  field; all four descriptors in `tool-descriptors.ts` now declare their real
+  path (`atlas.chat` -> `POST /v1/chat`, etc). Test asserts every published
+  descriptor carries one.
+- **Closes the original incident**: a consumer polling `.well-known/vxture-tools`
+  during TD-013's path retirement would have seen a byte-identical response
+  and found out by 404. It would now see the path change directly.
+
+### TD-020 - progress note (2026-07-28, atlas+platform closed)
+
+- **Corrected by the platform line** (`vxture-atlas`#66): platform's own live
+  ruleset already had `bypass_actors: []` - done directly, just undocumented
+  until they found it while closing out the reference-artifact fix. Reference
+  artifact + governance doc now match (`platform`#172).
+- **What's actually left**: karda/arda/template only. Each is a single-repo
+  write-scope boundary neither atlas nor platform can push further from here
+  - tracked per-repo, owner action across three repos.
