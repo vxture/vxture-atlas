@@ -216,7 +216,7 @@ function mapFinishReason(value: string | undefined): FinishReason | undefined {
   }
 }
 
-async function* parseOpenAiCompatibleStream(
+export async function* parseOpenAiCompatibleStream(
   body: ReadableStream<Uint8Array>,
 ): AsyncGenerator<StreamEvent> {
   const reader = body.getReader();
@@ -356,7 +356,7 @@ function findEventBoundary(buffer: string): number {
   return Math.min(lf, crlf);
 }
 
-async function safeReadText(response: Response): Promise<string> {
+export async function safeReadText(response: Response): Promise<string> {
   try {
     return await response.text();
   } catch {

@@ -3,6 +3,7 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { ClaudeProvider } from "../providers/claude.provider";
 import { DoubaoProvider } from "../providers/doubao.provider";
 import { PrivateModelProvider } from "../providers/private.provider";
+import { ZhipuProvider } from "../providers/zhipu.provider";
 import type { IModelProvider } from "../types/runtime.types";
 import { ModelRuntimeException } from "../runtime/runtime.errors";
 
@@ -17,6 +18,8 @@ export class ModelRouterService {
     claudeProvider: ClaudeProvider,
     @Inject(PrivateModelProvider)
     privateProvider: PrivateModelProvider,
+    @Inject(ZhipuProvider)
+    zhipuProvider: ZhipuProvider,
   ) {
     this.providers = new Map<string, IModelProvider>([
       [doubaoProvider.providerName, doubaoProvider],
@@ -26,6 +29,7 @@ export class ModelRouterService {
       [privateProvider.providerName, privateProvider],
       ["custom", privateProvider],
       ["self-hosted", privateProvider],
+      [zhipuProvider.providerName, zhipuProvider],
     ]);
   }
 
