@@ -158,7 +158,7 @@ export interface AtlasPrismaClient {
    * reqlog partition-runway readiness check (TD-018) reads `pg_inherits`,
    * which has no Prisma model. Never pass caller-derived input here.
    */
-  $queryRawUnsafe<T>(query: string): Promise<T>;
+  $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T>;
   $transaction<T>(
     fn: (tx: AtlasPrismaClient) => Promise<T>,
   ): Promise<T>;

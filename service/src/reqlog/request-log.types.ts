@@ -13,12 +13,17 @@ export interface RequestLogEntry {
   requestId: string;
   status: "success" | "error" | "timeout";
 
-  /** Authoritative dimensions, derived from the verified S2S token (rule 8). */
+  /**
+   * Authoritative tenancy dimensions, derived from the verified S2S token
+   * (rule 8). `tenantId` prefers the token's `org_id` claim over anything the
+   * caller supplied: it is the rollup level for tenant-scoped views, and a
+   * caller-asserted value is both untrustworthy and, in practice, often not a
+   * UUID at all (karda's composite identifier, TD-010) - which would coerce to
+   * NULL and leave the tenant dimension permanently empty.
+   */
+  tenantId?: string | undefined;
   workspaceId?: string | undefined;
   userId?: string | undefined;
-
-  /** Caller-supplied scope, recorded as the grant/quota lookup actually used it. */
-  tenantId?: string | undefined;
   applicationId?: string | undefined;
   applicationType?: ApplicationType | undefined;
   agentId?: string | undefined;

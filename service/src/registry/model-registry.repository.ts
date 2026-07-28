@@ -580,6 +580,57 @@ export class ModelRegistryRepository {
 
   /** FAIL-OPEN (TD-002/TD-005) - same reason as findCurrentSubscriptionQuota. */
   /**
+   * Tenant self-service usage, aggregated from Atlas's own request log.
+   *
+   * Deliberately NOT read from `listUsageSummaries` (which is a stub returning
+   * `[]` - the platform-side mirror was removed in the DB split, TD-005): that
+   * would serve an empty page and look like "no usage" rather than "not
+   * wired". `reqlog.request_records` is real data Atlas actually writes
+   * (TD-017), so this answers the question honestly.
+   *
+   * `scopeColumn` is chosen by the caller from a fixed pair - never
+   * interpolated from request input - and `scopeId` is bound as a parameter.
+   */
+  aggregateReqlogUsage(params: {
+    scopeColumn: "tenant_id" | "workspace_id";
+    scopeId: string;
+    from: Date;
+    to: Date;
+  }): Promise<
+    Array<{
+      modelCode: string | null;
+      providerCode: string | null;
+      requests: bigint;
+      inputTokens: bigint | null;
+      outputTokens: bigint | null;
+      totalTokens: bigint | null;
+      errors: bigint;
+    }>
+  > {
+    const column = params.scopeColumn === "tenant_id" ? "tenant_id" : "workspace_id";
+    return prisma.$queryRawUnsafe(
+      `
+      SELECT
+        model_code                                   AS "modelCode",
+        provider_code                                AS "providerCode",
+        count(*)                                     AS "requests",
+        coalesce(sum(input_tokens), 0)               AS "inputTokens",
+        coalesce(sum(output_tokens), 0)              AS "outputTokens",
+        coalesce(sum(total_tokens), 0)               AS "totalTokens",
+        count(*) FILTER (WHERE status <> 'success')  AS "errors"
+      FROM reqlog.request_records
+      WHERE ${column} = $1::uuid
+        AND created_at >= $2 AND created_at < $3
+      GROUP BY model_code, provider_code
+      ORDER BY "totalTokens" DESC, model_code
+      `,
+      params.scopeId,
+      params.from,
+      params.to,
+    );
+  }
+
+  /**
    * TD-018: reqlog partition runway + DEFAULT-partition occupancy, for the
    * readiness check. Reads `pg_inherits` because partitions have no Prisma
    * model. The query is a constant - nothing here is caller-derived.

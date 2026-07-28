@@ -64,3 +64,29 @@ here indefinitely.
 OIDC RP (five endpoints, per `product_240_repo-template.md`'s inherited
 services-profile obligation) - no controller exists in code yet. Do not
 treat as a live integration point.
+
+## Tenant self-service plane
+
+Auth: `S2sAuthGuard` (`tool:atlas`). **Scope is derived from the token, never
+from the caller** - `?scope=tenant` uses the `org_id` claim, `?scope=workspace`
+(default) uses `workspace_id`. There is no request field that can widen it.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/tenancy/models` | Models this workspace holds an active grant for |
+| GET | `/tenancy/usage` | `?scope=workspace\|tenant`, `?days=1..366` (default 30) |
+
+Two levels because the platform's model has two: workspace is the
+cost-accounting unit, tenant (org) is the rollup above it, and a tenant
+operator needs both views. The namespace is named after the tenancy
+*dimension* rather than either level.
+
+`/tenancy/usage` is served from Atlas's **own** `reqlog.request_records`
+(`source: "atlas.reqlog"`), i.e. what actually ran. It is **not** a billing
+figure - billing sums the platform's `usage_events` over the subscription
+period. See `docs/30-design/210-usage-metering-and-history.md`.
+
+This supersedes `/v1/models?tenantId=`, which took the tenant id as a
+caller-asserted query param and therefore let any valid S2S token enumerate
+any tenant's entitlements. That endpoint still exists for karda; it should be
+retired once callers move (see `vxture-atlas`#52 / #66).
