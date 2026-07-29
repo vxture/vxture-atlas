@@ -21,6 +21,14 @@ export interface CreateProviderKeyBody {
 export interface RotateProviderKeyBody {
   /** Write-only: the new secret value replacing the current one under the same alias. */
   plaintextKey?: string;
+  /**
+   * Set by `ProviderKeyController` from the verified operator token, never
+   * accepted from the client (M-5, vxture-atlas#52) - a caller-supplied
+   * value here would be exactly the "service sentinel, not operator
+   * attribution" gap M-5 exists to close. Optional only because the field is
+   * absent for a request that somehow reaches `ProviderKeyService` without
+   * having gone through the guard (defensive typing, not an expected path).
+   */
   rotatedBy?: string;
   reason?: string;
 }

@@ -28,9 +28,20 @@ Auth: `S2sAuthGuard` (RS256, `aud="atlas"`, platform OIDC issuer/JWKS).
 
 ## Capability plane - operator/registry surface
 
-Auth: currently `S2sAuthGuard`; migrating to operator-token verification
-(`scope=mgmt:atlas`) under `vxture-atlas`#52 - do not assume S2S tokens work
-here indefinitely.
+Auth: `OperatorAuthGuard` (2026-07-29, #52, M-1) - RS256, same issuer/JWKS as
+the S2S guard, but requires `aud="atlas"` · `realm="workforce"` ·
+`userType="operator"` · `scope="mgmt:atlas"`. Structurally disjoint from the
+S2S surface's `tool:atlas` - an S2S token 401s here and an operator token
+401s on `/v1`/`/tenancy`, by design (`product_250_management-plane-contract.md`
+§2). Console-bff's tenant reads moved to `/tenancy/*` first (#70) specifically
+so this swap wouldn't break them - do not point a service-identity caller at
+this plane.
+
+The four provider-key mutation routes (create/rotate/activate/deactivate)
+additionally require `StepUpRequiredGuard`: the token's `amr` claim must
+contain a factor beyond `pwd` (M-1 item 2, step-up freshness). `rotate`
+derives `key_rotation_logs.rotated_by` from the verified operator's `sub`,
+never a request-body field (M-5 attribution).
 
 | Method | Path | Notes |
 |---|---|---|
@@ -41,7 +52,8 @@ here indefinitely.
 | GET/POST/PUT | `/capability/policies[/:id[/activate\|deactivate]]` | Policy |
 | GET | `/capability/quotas` | **501** (TD-002/TD-005) - the platform exposes only a single-workspace C2 read, no bulk/list endpoint, so this cannot be answered honestly; use `/tenancy/quotas` per workspace instead |
 | GET | `/capability/usage-summaries` | Read-only, currently always empty (no writer - see TD-005 progress note) |
-| GET/POST | `/capability/provider-keys[/:id/rotate\|activate\|deactivate]` | Provider API key vault (TD-006, envelope-encrypted) |
+| GET | `/capability/provider-keys` | No step-up required (read-only) |
+| POST/PUT | `/capability/provider-keys[/:id/rotate\|activate\|deactivate]` | Provider API key vault (TD-006, envelope-encrypted) - step-up required |
 
 ## Infra / health - unauthenticated except where noted
 

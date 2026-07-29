@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
-import { S2sAuthGuard } from "./guards/s2s-auth.guard";
+import { OperatorAuthGuard } from "./guards/operator-auth.guard";
 import {
   ModelAdminService,
   type AiModelAdminRecord,
@@ -40,13 +40,15 @@ import type { ApplicationType } from "../types/runtime.types";
 // (product_250_management-plane-contract.md M-4 migrates this OSS
 // "capability & service" domain out of admin-bff into capconsole-bff).
 // /capability mirrors the already-decided Capability Console UI name.
-// `model-platform/admin` retired outright (no alias) - admin-bff and
-// console-bff both still call the old path as of this change and will error
-// until updated, by explicit product decision (TD-013 progress note), not a
-// deprecation-cycle oversight. Auth model swaps from S2sAuthGuard to
-// operator-token verification per atlas#52 separately.
+// `model-platform/admin` retired outright (no alias, TD-013).
+//
+// Auth swapped from S2sAuthGuard to OperatorAuthGuard 2026-07-29 (#52, M-1):
+// this namespace is operator-only now. console-bff's tenant-facing reads
+// moved to /tenancy/* first (#70/#66) precisely so this swap would not break
+// them - do not point a service-identity (tool:atlas) caller at this
+// controller again.
 @Controller("capability")
-@UseGuards(S2sAuthGuard)
+@UseGuards(OperatorAuthGuard)
 export class ModelAdminController {
   constructor(
     @Inject(ModelAdminService) private readonly admin: ModelAdminService,
