@@ -37,6 +37,7 @@ repo-split plan itself - not discovered later.
 | TD-019 | `.well-known/vxture-tools` advertises `atlas.parse` with `deprecated: false`, formally identical to the three real capabilities, but no provider implements `parseDocument` - every call returns 501, so Atlas publishes a capability claim it does not honour to the very mechanism product_210 §11 makes consumers rely on | 2026-07-28 | open - parse withheld from the published manifest as an interim fix; needs a real provider (#38) or a maturity field on the descriptor (platform#159) |
 
 | TD-020 | Branch protection was advisory for admins: `main-ruleset.json` declared `bypass_actors: [RepositoryRole 5 (admin), bypass_mode: always]`, so a direct `git push origin main` from an admin account succeeded silently despite CLAUDE.md stating direct pushes are BLOCKED - found when exactly that push went through by accident. All five org repos (atlas/platform/karda/arda/template) carried the same bypass | 2026-07-28 | atlas + platform closed 2026-07-28 - Atlas fixed its own live ruleset and reference file; platform's live ruleset was independently already `[]` and its reference artifact + governance doc fixed too (platform#172). Remaining exposure is karda/arda/template only - outside both atlas's and platform's write-scope, tracked per-repo (karda#82/arda#187/template#37) |
+| TD-021 | `/capability/*` (registry CRUD + provider-keys) had no operator-identity verification: registry routes were unauthenticated, provider-keys asserted a service identity (`S2sAuthGuard`) where the real actor is a person - which admin-bff's operator-OBO proxy can't satisfy anyway. M-1/M-5 (`vxture-atlas`#52) required real verification once console-bff's tenant reads moved off this plane (#70) made the swap safe | 2026-07-29 | closed 2026-07-29 - `OperatorAuthGuard` verifies `aud`/`realm`/`userType`/`scope=mgmt:atlas`/`exp`, structurally disjoint from the S2S surface's `tool:atlas`; `StepUpRequiredGuard` additionally requires an `amr` factor beyond `pwd` on the four provider-key mutation routes; `key_rotation_logs.rotated_by` now derives from the verified operator `sub`, never a request-body field |
 
 ## TD-001 - deploy host unassigned; beta tier dormant
 
@@ -1150,3 +1151,66 @@ repo-split plan itself - not discovered later.
 - **Verified**: 5 new tests on `resolveUpstreamModel` (prefer/fallback/blank/
   non-string/trim) plus one proving Zhipu's embed body actually sends the
   resolved value, not the raw `modelCode`, when `upstreamModel` is set.
+
+## TD-021 - operator-token verification on the capability plane
+
+- **What was wrong**: `/capability/*` (the renamed `model-platform/admin/*`,
+  TD-013) had no real operator-identity check. Registry routes
+  (providers/models/grants/price-rules/policies) were behind `S2sAuthGuard`
+  in name only in practice - any valid S2S token, from any product, could
+  read or mutate the registry. `provider-keys*` was behind `S2sAuthGuard`
+  properly, but that asserts a *service* identity; the real actor mutating a
+  provider key is a *person* clicking a button in an admin UI, and
+  `admin-bff`'s operator-OBO proxy has no S2S token to present on that
+  person's behalf in the first place (`vxture-atlas`#52's own framing).
+- **Why this had to wait**: `console-bff` was calling this same namespace
+  with `tool:atlas` for its tenant-facing reads (models/grants/quotas/usage).
+  Locking the plane to `mgmt:atlas` as written would have 401'd the tenant
+  console the day it shipped - not a spec bug on either side, two genuinely
+  different identities pointed at one namespace. Resolved by building
+  `/tenancy/*` first (#70) so console-bff had somewhere to move to, then
+  confirming the cutover was live (#66) before this closed.
+- **Fix**: `OperatorAuthGuard`
+  (`runtime/guards/operator-auth.guard.ts`) verifies the operator-OBO token
+  contract from `product_250_management-plane-contract.md` §2: RS256 against
+  the same issuer/JWKS `S2sAuthGuard` trusts (factored into a shared
+  `jwt-shared.ts` so there is one JWKS cache, not two), `aud="atlas"`,
+  `realm="workforce"`, `userType="operator"`, `scope="mgmt:atlas"` exactly
+  (not merely "not tool:atlas" - an explicit allowlist), `exp`. `sub` is
+  required with no fallback (M-5 has no attribution to record without it).
+  Swapped onto `ModelAdminController` and `ProviderKeyController`;
+  `S2sAuthGuard` no longer guards either.
+- **Step-up (M-1 item 2)**: `StepUpRequiredGuard`, stacked additively on the
+  four provider-key mutation routes (create/rotate/activate/deactivate) via
+  method-level `@UseGuards`, not the read-only `list`. The contract gives one
+  worked example (`amr: ["pwd","otp"]`) and no enumerated policy of which
+  factors qualify - per product_250's own division of labor ("step-up 策略
+  ... 归 platform"), the policy itself is platform's to set. Implemented a
+  defensible baseline pending their correction: step-up means `amr` contains
+  something beyond `pwd`. Documented as an explicit interpretation in the
+  guard's own comment, not presented as settled policy.
+- **M-5 attribution**: `key_rotation_logs.rotated_by` used to come from
+  `RotateProviderKeyBody.rotatedBy` - a caller-supplied body field, i.e.
+  exactly the "service sentinel, not operator attribution" gap M-5 exists to
+  close (rule 8 precedent: never trust caller-asserted identity). The
+  controller now derives it from `req.operatorAuth.operatorId`
+  unconditionally; the body field is only read as a defensive fallback type,
+  never as the actual source.
+- **Scope deliberately narrowed from "any admin-action audit rows"**: the
+  issue's parenthetical calls for auditing more broadly, but
+  `key_rotation_logs.rotated_by` is the only concretely-named artifact in the
+  numbered requirements, and the only one with an existing "who did this"
+  column wired to nothing. The five registry tables
+  (providers/models/grants/price-rules/policies) also carry unused
+  `created_by`/`updated_by` columns (`00_baseline.sql`, "bare value ->
+  platform admin.operator_accounts, boundary #2") - wiring those is a
+  same-shape follow-up, not done here, to avoid ballooning one guard-swap PR
+  into a 15-method refactor across every registry resource. Worth its own
+  tracked item if wanted.
+- **Verified**: 305 tests total, +21 this entry - full operator-token
+  contract (accept/reject per claim), the cross-guard disjointness proof in
+  both directions (operator token also fails `verifyS2sToken`, S2S token also
+  fails `verifyOperatorToken`), `hasStepUpFactor`'s edge cases, and
+  `StepUpRequiredGuard`'s fail-closed behavior if `OperatorAuthGuard`
+  somehow didn't run first. No DB schema touched, so no new Postgres
+  verification needed beyond the existing `rotate()` coverage.

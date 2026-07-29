@@ -16,6 +16,11 @@
  *   and rule 8 (never trust header/body-supplied org/workspace context) are
  *   satisfied by omission: this guard only reads the `Authorization: Bearer`
  *   header and only derives context from verified token claims.
+ *
+ *   Guards only the S2S supply surface (`/v1/*`, `/tenancy/*`) - the
+ *   management plane (`/capability/*`) moved to `OperatorAuthGuard`
+ *   (vxture-atlas#52). `scope` discipline keeps the two disjoint: `tool:atlas`
+ *   here, `mgmt:atlas` there.
  */
 import {
   CanActivate,
@@ -23,15 +28,15 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
+
 import {
-  createRemoteJWKSet,
-  jwtVerify,
-  type JWTPayload,
-  type JWTVerifyGetKey,
-} from "jose";
+  extractBearerToken,
+  requireIssuer,
+  resolveRemoteJwks,
+} from "./jwt-shared";
 
 const CLOCK_TOLERANCE_SECONDS = 60;
-const JWKS_PATH = "/oidc/jwks";
 const DEFAULT_AUDIENCE = "atlas";
 
 export interface S2sAuthContext {
@@ -112,29 +117,6 @@ export async function verifyS2sToken(
   };
 }
 
-let cachedJwks: JWTVerifyGetKey | undefined;
-let cachedJwksUri: string | undefined;
-
-function resolveRemoteJwks(issuer: string): JWTVerifyGetKey {
-  const jwksUri = `${issuer.replace(/\/$/, "")}${JWKS_PATH}`;
-  if (!cachedJwks || cachedJwksUri !== jwksUri) {
-    cachedJwks = createRemoteJWKSet(new URL(jwksUri));
-    cachedJwksUri = jwksUri;
-  }
-  return cachedJwks;
-}
-
-function requireIssuer(): string {
-  const issuer = process.env["OIDC_ISSUER"];
-  if (!issuer) {
-    throw new UnauthorizedException({
-      code: "S2S_ISSUER_NOT_CONFIGURED",
-      message: "OIDC_ISSUER is not configured",
-    });
-  }
-  return issuer;
-}
-
 @Injectable()
 export class S2sAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -159,17 +141,4 @@ export class S2sAuthGuard implements CanActivate {
     });
     return true;
   }
-}
-
-function extractBearerToken(
-  headers: Record<string, unknown>,
-): string | undefined {
-  const raw = headers["authorization"] ?? headers["Authorization"];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const match = /^Bearer\s+(.+)$/i.exec(value.trim());
-  return match?.[1];
 }

@@ -35,7 +35,7 @@ issue state is the source of truth, not this row.
 | [#38](https://github.com/vxture/vxture-atlas/issues/38) | atlas | A2 real parse provider | Open - product/cost decision |
 | [#39](https://github.com/vxture/vxture-atlas/issues/39) | atlas | A3 real rerank provider | Open - product/cost decision |
 | [#40](https://github.com/vxture/vxture-atlas/issues/40) | atlas | `/model-platform/chat` -> `/v1/chat` rename | Closed 2026-07-28 - superseded by #60/TD-013 (legacy path retired outright, not just aliased) |
-| [#52](https://github.com/vxture/vxture-atlas/issues/52) | atlas | M-1 operator-token verification on admin routes (mgmt-plane contract batch B) | Open - platform half landed, atlas half not started |
+| [#52](https://github.com/vxture/vxture-atlas/issues/52) | atlas | M-1 operator-token verification on admin routes (mgmt-plane contract batch B) | Closed 2026-07-29 (TD-021) - `OperatorAuthGuard`+`StepUpRequiredGuard` implemented; blocked on console-bff's `/tenancy/*` cutover until it was confirmed live |
 | [#60](https://github.com/vxture/vxture-atlas/pull/60) | atlas | `model-platform` route-prefix cleanup (TD-013): admin -> `/capability`, health dedup | Merged |
 | [#61](https://github.com/vxture/vxture-atlas/pull/61) | atlas | Retire all legacy `model-platform/*` paths outright (no alias) | Merged - full path map `docs/20-specs/10-http-surface.md` |
 | [#41](https://github.com/vxture/vxture-atlas/issues/41) | atlas | Tenant-scoped model list | Closed - shipped, deployed, confirmed live |
