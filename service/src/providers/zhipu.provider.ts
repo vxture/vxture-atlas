@@ -1,21 +1,12 @@
 import { Injectable } from "@nestjs/common";
 
-import { BaseProvider, joinEndpoint, resolveUpstreamModel } from "./base.provider";
-import {
-  buildOpenAiCompatibleBody,
-  normalizeOpenAiCompatibleResponse,
-  resolveChatCompletionsEndpoint,
-  streamOpenAiCompatibleChat,
-} from "./openai-compatible";
-import type { OpenAiCompatibleChatResponse } from "./openai-compatible.types";
+import { joinEndpoint, resolveUpstreamModel } from "./base.provider";
+import { OpenAiCompatibleProvider } from "./openai-compatible.provider";
 import type {
-  ProviderChatRequest,
-  ProviderChatResponse,
   ProviderEmbedRequest,
   ProviderEmbedResponse,
   ProviderRerankRequest,
   ProviderRerankResponse,
-  StreamEvent,
 } from "../types/runtime.types";
 
 /**
@@ -35,30 +26,17 @@ interface ZhipuRerankResponse {
   results: Array<{ index: number; relevance_score: number; document?: string }>;
 }
 
-/** Zhipu (BigModel) - OpenAI-compatible chat completions API. */
+/**
+ * Zhipu (BigModel).
+ *
+ * chat 走通用 `openai-chat-completions` 协议（继承而来，无覆盖）。这个子类
+ * 存在的理由是它在该协议**之外**还多支持两项能力：真实的 Embedding-3/2 与
+ * rerank API —— 这两个不是 OpenAI Chat Completions 的一部分，无法用
+ * `config.wire` 表达，因此属于设计文档 §7 所说的"特例层"。
+ */
 @Injectable()
-export class ZhipuProvider extends BaseProvider {
-  readonly providerName = "zhipu";
-
-  async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
-    const response = await this.postJson<OpenAiCompatibleChatResponse>(
-      resolveChatCompletionsEndpoint(request.endpointUrl),
-      {
-        authorization: `Bearer ${request.apiKey}`,
-      },
-      buildOpenAiCompatibleBody(request, false),
-    );
-
-    return normalizeOpenAiCompatibleResponse(this.providerName, response);
-  }
-
-  override async *chatStream(
-    request: ProviderChatRequest,
-  ): AsyncGenerator<StreamEvent> {
-    yield* streamOpenAiCompatibleChat(this.providerName, request, {
-      authorization: `Bearer ${request.apiKey}`,
-    });
-  }
+export class ZhipuProvider extends OpenAiCompatibleProvider {
+  override readonly providerName = "zhipu";
 
   /**
    * A1 embedding - real Zhipu Embedding-3/Embedding-2 API. `modelCode` is

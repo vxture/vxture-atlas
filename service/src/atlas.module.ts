@@ -15,6 +15,7 @@ import { TenancyService } from "./tenancy/tenancy.service";
 import { ClaudeProvider } from "./providers/claude.provider";
 import { DoubaoProvider } from "./providers/doubao.provider";
 import { ZhipuProvider } from "./providers/zhipu.provider";
+import { OpenAiCompatibleProvider } from "./providers/openai-compatible.provider";
 import { PrivateModelProvider } from "./providers/private.provider";
 import { ModelRegistryRepository } from "./registry/model-registry.repository";
 import { ModelRegistryService } from "./registry/model-registry.service";
@@ -60,6 +61,7 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     RequestLogService,
     PlatformEntitlementClient,
     TenancyService,
+    OpenAiCompatibleProvider,
     DoubaoProvider,
     ZhipuProvider,
     ClaudeProvider,
