@@ -12,7 +12,7 @@ below is the only path. Older integration notes referencing
 `model-platform/chat`, `model-platform/models`, or `model-platform/admin/*`
 are stale; those paths return 404.
 
-Last verified against `service/src/**/*.controller.ts`: 2026-07-28.
+Last verified against `service/src/**/*.controller.ts`: 2026-08-01.
 
 ## Data plane - S2S inference calls
 
@@ -45,6 +45,7 @@ never a request-body field (M-5 attribution).
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/capability/protocols` | Wire-protocol vocabulary + each protocol's `config.wire` defaults - the management UI's dropdown source. Static, no tenant data (`docs/30-design/100-model-onboarding-and-protocol-adapters.md` §5/§10) |
 | GET/POST/PUT/DELETE | `/capability/providers[/:id[/activate\|deactivate]]` | Provider registry |
 | GET/POST/PUT/DELETE | `/capability/models[/:id[/activate\|deactivate]]` | Model registry |
 | GET/POST/PUT/DELETE | `/capability/grants[/:id[/activate]]` | Tenant/application grants, incl. `taskProfile` |

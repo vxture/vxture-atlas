@@ -50,6 +50,124 @@ const VALID_BASE: CreateAiModelBody = {
   capabilities: ["chat"],
 };
 
+// ── protocol vocabulary + wire descriptor (P2) ────────────────────────────────
+
+describe("protocol validation on write", () => {
+  it("normalizes a legacy alias to its canonical value on create", () => {
+    // 现网存量就是 `openai`/`anthropic` 两个别名 - 拒绝它们会让运营改一个
+    // 无关字段时被绊住；归一化写回则让数据自己收敛。
+    expect(normalizeCreate({ ...VALID_BASE, protocol: "openai" })).toMatchObject(
+      { protocol: "openai-chat-completions" },
+    );
+    expect(
+      normalizeCreate({ ...VALID_BASE, protocol: "anthropic" }),
+    ).toMatchObject({ protocol: "anthropic-messages" });
+  });
+
+  it("normalizes on update too", () => {
+    expect(normalizeUpdate({ protocol: "  CLAUDE  " })).toMatchObject({
+      protocol: "anthropic-messages",
+    });
+  });
+
+  it("rejects a protocol outside the vocabulary", () => {
+    // protocol 是分发键，不是自由文本 - 一个拼错的值会让模型不可路由。
+    expect(() =>
+      normalizeCreate({ ...VALID_BASE, protocol: "doubao" }),
+    ).toThrow(ModelAdminException);
+  });
+
+  it("still requires protocol to be present", () => {
+    const body = { ...VALID_BASE };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (body as any).protocol;
+    expect(() => normalizeCreate(body)).toThrow(ModelAdminException);
+  });
+});
+
+describe("config.wire validation on write", () => {
+  it("accepts a valid descriptor", () => {
+    expect(
+      normalizeCreate({
+        ...VALID_BASE,
+        config: { wire: { streamUsage: "none", supports: { tools: false } } },
+      }),
+    ).toMatchObject({
+      config: { wire: { streamUsage: "none" } },
+    });
+  });
+
+  it("rejects an unknown wire key rather than silently ignoring it", () => {
+    expect(() =>
+      normalizeCreate({ ...VALID_BASE, config: { wire: { streamUsge: "none" } } }),
+    ).toThrow(ModelAdminException);
+  });
+
+  it("rejects an out-of-vocabulary wire value", () => {
+    expect(() =>
+      normalizeCreate({
+        ...VALID_BASE,
+        config: { wire: { streamUsage: "carrier-pigeon" } },
+      }),
+    ).toThrow(ModelAdminException);
+  });
+
+  it("applies to provider config as well as model config", () => {
+    expect(() =>
+      normalizeCreateProvider({
+        providerCode: "deepseek",
+        providerName: "DeepSeek",
+        config: { wire: { auth: { style: "magic" } } },
+      }),
+    ).toThrow(ModelAdminException);
+  });
+
+  it("leaves a config without a wire block alone", () => {
+    expect(
+      normalizeCreate({ ...VALID_BASE, config: { upstreamModel: "gpt-4o" } }),
+    ).toMatchObject({ config: { upstreamModel: "gpt-4o" } });
+  });
+});
+
+describe("getProtocolCatalog", () => {
+  it("lists every protocol with its aliases and wire defaults", () => {
+    const catalog = svc.getProtocolCatalog();
+
+    expect(catalog.protocols.map((p) => p.protocol)).toEqual([
+      "openai-chat-completions",
+      "anthropic-messages",
+    ]);
+    expect(catalog.wireSchemaVersion).toBeGreaterThanOrEqual(1);
+  });
+
+  it("exposes the defaults the adapters actually use", () => {
+    const catalog = svc.getProtocolCatalog();
+    const openai = catalog.protocols.find(
+      (p) => p.protocol === "openai-chat-completions",
+    );
+    const anthropic = catalog.protocols.find(
+      (p) => p.protocol === "anthropic-messages",
+    );
+
+    expect(openai?.wireDefaults.streamUsage).toBe("stream_options");
+    expect(anthropic?.wireDefaults.streamUsage).toBe("native");
+    expect(openai?.aliases).toContain("openai");
+  });
+
+  it("presents knownUpstreams as a hint, not a closed list", () => {
+    // 词表按线格式定义 - 任何讲这套方言的上游都能用，不在列表里也能接。
+    const catalog = svc.getProtocolCatalog();
+    const openai = catalog.protocols.find(
+      (p) => p.protocol === "openai-chat-completions",
+    );
+
+    expect(openai?.knownUpstreams).toContain("deepseek");
+    expect(() =>
+      normalizeCreate({ ...VALID_BASE, provider: "some-new-vendor" }),
+    ).not.toThrow();
+  });
+});
+
 // ── normalizeCreateModel ──────────────────────────────────────────────────────
 
 describe("normalizeCreateModel", () => {

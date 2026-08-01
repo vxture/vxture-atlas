@@ -56,3 +56,53 @@ export function normalizeProtocol(
 export function isModelProtocol(value: string): value is ModelProtocol {
   return (MODEL_PROTOCOLS as readonly string[]).includes(value);
 }
+
+/** 某个规范值可接受的所有别名（供管理面展示，说明为什么旧值仍能录入）。 */
+export function aliasesFor(protocol: ModelProtocol): string[] {
+  return Object.entries(ALIASES)
+    .filter(([, target]) => target === protocol)
+    .map(([alias]) => alias)
+    .sort();
+}
+
+export interface ProtocolDescriptor {
+  protocol: ModelProtocol;
+  /** 面向运营的一句话说明：这个 protocol 覆盖哪些上游。 */
+  description: string;
+  /** 已知讲这套方言的上游，仅作录入提示，**不是**白名单。 */
+  knownUpstreams: string[];
+  aliases: string[];
+}
+
+/**
+ * 管理面的下拉数据源。
+ *
+ * `knownUpstreams` 是提示而非约束 —— 词表按线格式定义，任何讲这套方言的上游
+ * 都能用，哪怕它不在这个列表里。把它当白名单就又把"接入"变回了发版。
+ */
+export const PROTOCOL_CATALOG: readonly ProtocolDescriptor[] = Object.freeze([
+  {
+    protocol: "openai-chat-completions",
+    description:
+      "OpenAI /chat/completions dialect - the default for any OpenAI-compatible upstream.",
+    knownUpstreams: [
+      "doubao",
+      "zhipu",
+      "deepseek",
+      "qwen",
+      "moonshot",
+      "siliconflow",
+      "openai",
+      "vllm",
+      "ollama",
+    ],
+    aliases: aliasesFor("openai-chat-completions"),
+  },
+  {
+    protocol: "anthropic-messages",
+    description:
+      "Anthropic /v1/messages - distinct request, response and streaming event model.",
+    knownUpstreams: ["anthropic"],
+    aliases: aliasesFor("anthropic-messages"),
+  },
+]);
