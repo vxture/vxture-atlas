@@ -126,7 +126,7 @@ export class ModelRuntimeService {
         const startedAt = Date.now();
 
         try {
-          const provider = this.router.resolve(model.provider, model.modelCode);
+          const provider = this.router.resolve(model);
           const apiKey = await resolveApiKey({ resolveManagedKey: this.resolveManagedKey }, model, requestId);
           this.logRuntimeEvent("model_runtime_provider_start", {
             request,
@@ -352,7 +352,7 @@ export class ModelRuntimeService {
         lastUsage = undefined;
 
         try {
-          const provider = this.router.resolve(model.provider, model.modelCode);
+          const provider = this.router.resolve(model);
           const apiKey = await resolveApiKey({ resolveManagedKey: this.resolveManagedKey }, model, requestId);
           this.logRuntimeEvent("model_runtime_provider_stream_start", {
             request,

@@ -425,8 +425,9 @@ describe("ModelRuntimeService runtime flow", () => {
       ...overrides.registry,
     };
     const router = {
-      resolve: vi.fn((providerName: string) =>
-        providerName === "fallback" ? fallbackProvider : provider,
+      // resolve() 现在收整行模型（protocol 参与分发），不再只收 provider code。
+      resolve: vi.fn((model: { provider: string }) =>
+        model.provider === "fallback" ? fallbackProvider : provider,
       ),
       ...overrides.router,
     };
