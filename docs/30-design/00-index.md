@@ -18,6 +18,13 @@ implementation. `decisions/` holds ADRs (keyed by ADR number, not sequence).
 
 ## Written
 
+- `100-model-onboarding-and-protocol-adapters.md` - draft. Splits "who" (a
+  `model_providers` row), "how" (the `protocol` dispatch key, a closed
+  vocabulary in code) and "quirks" (a `config.wire` descriptor in the existing
+  jsonb columns, zero DDL), so that onboarding a provider or model is a data
+  operation and only a genuinely different wire format costs code. Records
+  that `models.protocol` has always existed and been accepted, echoed and
+  stored - but never read for dispatch.
 - `200-s2s-provider-surface.md` - v0.1 design for the A1(embedding)/A2(parse)/A3(rerank) S2S
   endpoints, written directly from karda's submitted requirements
   (`docs/80-liaison/100-2607240931-...`). G1 (429 rate-limit vs quota-exhaustion) is decided;
