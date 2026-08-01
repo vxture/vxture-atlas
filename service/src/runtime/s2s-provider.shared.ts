@@ -135,7 +135,7 @@ export async function resolveGatedModel(
   const modelCode = await resolveModelCode(deps.registry, request);
   const model = await deps.registry.getActiveModel(modelCode);
   await deps.quota.assertAllowed(model, request, auth);
-  const provider = deps.router.resolve(model.provider, model.modelCode);
+  const provider = deps.router.resolve(model);
   const apiKey = await resolveApiKey(
     {
       resolveManagedKey: (providerCode, keyAlias) =>

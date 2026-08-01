@@ -19,7 +19,8 @@ type MetricName =
   | "model_requests_total"
   | "model_request_errors_total"
   | "model_request_in_flight"
-  | "model_request_latency_ms";
+  | "model_request_latency_ms"
+  | "model_router_protocol_fallback_total";
 
 type MetricDefinition = {
   type: "counter" | "gauge" | "histogram";
@@ -49,6 +50,13 @@ const METRIC_DEFINITIONS: Record<MetricName, MetricDefinition> = {
     help: "model_request_latency_ms 模型平台运行时延迟分布（毫秒）",
     labelNames: ["operation", "provider"],
     buckets: [50, 100, 200, 500, 1_000, 2_000, 5_000, 10_000],
+  },
+  model_router_protocol_fallback_total: {
+    type: "counter",
+    help: "model_router_protocol_fallback_total 模型的 protocol 无法识别、退回按 provider_code 分发的次数（每一次都代表一行注册表数据待修正）",
+    // provider 来自注册表（受控集合），基数随服务商数量增长，量级为几十；
+    // 绝不放 model_code 或任何调用方可控的字符串（设计文档 §12.3）。
+    labelNames: ["provider"],
   },
 };
 
