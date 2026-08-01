@@ -1,3 +1,4 @@
+import { describeAbort, guardTimeToFirstByte } from "./upstream-timeout";
 import type {
   IModelProvider,
   ProviderChatRequest,
@@ -99,15 +100,27 @@ export abstract class BaseProvider implements IModelProvider {
     url: string,
     headers: Record<string, string>,
     body: Record<string, unknown>,
+    callerSignal?: AbortSignal,
   ): Promise<TResponse> {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...headers,
-      },
-      body: JSON.stringify(body),
-    });
+    const guard = guardTimeToFirstByte(this.providerName, callerSignal);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify(body),
+        signal: guard.signal,
+      });
+    } catch (error) {
+      throw describeAbort(error, guard, this.providerName);
+    } finally {
+      // 头部到了就解除计时 - 之后的 body 读取属于"上游在干活"，不该被误杀。
+      guard.settle();
+    }
 
     const responseText = await response.text();
 

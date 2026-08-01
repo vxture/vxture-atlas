@@ -39,6 +39,7 @@ export class OpenAiCompatibleProvider extends BaseProvider {
       resolveChatCompletionsEndpoint(request.endpointUrl, wire.chatPath),
       authHeaders(request, wire),
       buildOpenAiCompatibleBody(request, false, wire),
+      request.signal,
     );
 
     return normalizeOpenAiCompatibleResponse(this.providerName, response);

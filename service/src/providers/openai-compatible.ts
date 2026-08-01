@@ -206,6 +206,7 @@ export async function* streamOpenAiCompatibleChat(
     url: resolveChatCompletionsEndpoint(request.endpointUrl, wire.chatPath),
     headers,
     body: buildOpenAiCompatibleBody(request, true, wire),
+    ...(request.signal !== undefined ? { signal: request.signal } : {}),
   });
 
   yield* parseOpenAiCompatibleStream(body);

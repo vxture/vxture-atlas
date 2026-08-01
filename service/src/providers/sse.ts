@@ -2,6 +2,7 @@ import { EventSourceParserStream } from "eventsource-parser/stream";
 import type { EventSourceMessage } from "eventsource-parser/stream";
 
 import { ProviderHttpError } from "./base.provider";
+import { describeAbort, guardTimeToFirstByte } from "./upstream-timeout";
 
 /**
  * SSE 分帧解析层。
@@ -50,16 +51,28 @@ export async function openSseRequest(options: {
   url: string;
   headers: Record<string, string>;
   body: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<ReadableStream<Uint8Array>> {
-  const response = await fetch(options.url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "text/event-stream",
-      ...options.headers,
-    },
-    body: JSON.stringify(options.body),
-  });
+  const guard = guardTimeToFirstByte(options.providerName, options.signal);
+
+  let response: Response;
+  try {
+    response = await fetch(options.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        ...options.headers,
+      },
+      body: JSON.stringify(options.body),
+      signal: guard.signal,
+    });
+  } catch (error) {
+    throw describeAbort(error, guard, options.providerName);
+  } finally {
+    // 流式尤其需要在头部到达后解除计时：SSE 的 body 本来就要开着很久。
+    guard.settle();
+  }
 
   if (!response.ok) {
     throw new ProviderHttpError(

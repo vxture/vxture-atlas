@@ -203,6 +203,11 @@ export interface ProviderChatRequest {
   config?: ModelConfig;
   /** 服务商行的 config；与 `config` 一起解析出 `wire` 描述符（见 providers/wire.ts）。 */
   providerConfig?: ModelConfig;
+  /**
+   * 调用方的取消信号（自检的整体超时、HTTP 客户端断开等）。适配器把它并入
+   * 内部的首字节超时一起传给 fetch，见 providers/upstream-timeout.ts。
+   */
+  signal?: AbortSignal;
 }
 
 export interface ProviderChatResponse extends TokenUsage {
