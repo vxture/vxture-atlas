@@ -25,7 +25,8 @@ export type ModelAdminErrorCode =
   | "MODEL_ADMIN_POLICY_NOT_FOUND"
   | "MODEL_ADMIN_PRICE_RULE_NOT_FOUND"
   | "MODEL_ADMIN_SCOPE_INVALID"
-  | "MODEL_ADMIN_NOT_IMPLEMENTED";
+  | "MODEL_ADMIN_NOT_IMPLEMENTED"
+  | "MODEL_ADMIN_PROBE_COOLDOWN";
 
 export interface ModelAdminErrorResponse {
   code: ModelAdminErrorCode;
@@ -36,6 +37,8 @@ export interface ModelAdminErrorResponse {
   grantId?: string;
   policyId?: string;
   priceRuleId?: string;
+  /** MODEL_ADMIN_PROBE_COOLDOWN (429) - 距离下一次可自检还有多久。 */
+  retryAfterMs?: number;
 }
 
 // ============================================================================
@@ -54,6 +57,7 @@ export class ModelAdminException extends HttpException {
       grantId?: string;
       policyId?: string;
       priceRuleId?: string;
+      retryAfterMs?: number;
     } = {},
   ) {
     super(
@@ -75,6 +79,9 @@ export class ModelAdminException extends HttpException {
           : {}),
         ...(metadata.priceRuleId !== undefined
           ? { priceRuleId: metadata.priceRuleId }
+          : {}),
+        ...(metadata.retryAfterMs !== undefined
+          ? { retryAfterMs: metadata.retryAfterMs }
           : {}),
       } satisfies ModelAdminErrorResponse,
       status,

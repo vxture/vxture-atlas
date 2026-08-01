@@ -231,6 +231,70 @@ describe("ModelProbeService", () => {
     });
   });
 
+  describe("cooldown", () => {
+    it("rejects a second probe of the same model inside the window", async () => {
+      // 挡的是死循环和连点 - 不是身份问题，所以没有 StepUp（owner 决策）。
+      await ctx.service.probe("model-1");
+
+      await expect(ctx.service.probe("model-1")).rejects.toMatchObject({
+        code: "MODEL_ADMIN_PROBE_COOLDOWN",
+      });
+    });
+
+    it("tells the caller how long to wait", async () => {
+      await ctx.service.probe("model-1");
+
+      await ctx.service.probe("model-1").catch((error: unknown) => {
+        const response = (error as { getResponse: () => { retryAfterMs: number } })
+          .getResponse();
+        expect(response.retryAfterMs).toBeGreaterThan(0);
+        expect(response.retryAfterMs).toBeLessThanOrEqual(10_000);
+      });
+    });
+
+    it("does not make one model's probe block another", async () => {
+      await ctx.service.probe("model-1");
+
+      ctx.repository.findModelById.mockResolvedValueOnce(
+        makeModel({ id: "model-2", modelCode: "other" }),
+      );
+      await expect(ctx.service.probe("model-2")).resolves.toMatchObject({
+        modelId: "model-2",
+      });
+    });
+
+    it("does not consume the window when the model does not exist", async () => {
+      // 一个打错的 id 不该把真实模型的自检挡在门外。
+      const local = build({ model: null });
+      await expect(local.service.probe("nope")).rejects.toBeInstanceOf(
+        ModelAdminException,
+      );
+
+      local.repository.findModelById.mockResolvedValueOnce(makeModel());
+      await expect(local.service.probe("model-1")).resolves.toMatchObject({
+        ok: true,
+      });
+    });
+
+    it("consumes the window at the start, regardless of outcome", async () => {
+      // 窗口在发出上游请求之前就记时 - 否则一个卡住 20 秒的自检会把 10 秒的
+      // 窗口拖成 30 秒。失败的自检同样占用窗口，正是这一点的可观测证据。
+      const failing = build({
+        chat: vi.fn().mockRejectedValue(new Error("boom")),
+        chatStream: vi.fn(() => {
+          throw new Error("boom");
+        }),
+      });
+
+      const first = await failing.service.probe("model-1");
+      expect(first.ok).toBe(false);
+
+      await expect(failing.service.probe("model-1")).rejects.toMatchObject({
+        code: "MODEL_ADMIN_PROBE_COOLDOWN",
+      });
+    });
+  });
+
   it("caps the probe request so a self-check cannot cost real money", async () => {
     await ctx.service.probe("model-1");
 
