@@ -1,13 +1,12 @@
 import { Injectable } from "@nestjs/common";
 
-import { BaseProvider, ProviderHttpError, joinEndpoint, resolveUpstreamModel } from "./base.provider";
+import { BaseProvider, joinEndpoint, resolveUpstreamModel } from "./base.provider";
 import {
   buildOpenAiCompatibleBody,
   normalizeOpenAiCompatibleResponse,
-  parseOpenAiCompatibleStream,
   resolveChatCompletionsEndpoint,
-  safeReadText,
-} from "./doubao.provider";
+  streamOpenAiCompatibleChat,
+} from "./openai-compatible";
 import type { OpenAiCompatibleChatResponse } from "./openai-compatible.types";
 import type {
   ProviderChatRequest,
@@ -53,34 +52,12 @@ export class ZhipuProvider extends BaseProvider {
     return normalizeOpenAiCompatibleResponse(this.providerName, response);
   }
 
-  async *chatStream(request: ProviderChatRequest): AsyncGenerator<StreamEvent> {
-    const response = await fetch(
-      resolveChatCompletionsEndpoint(request.endpointUrl),
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "text/event-stream",
-          authorization: `Bearer ${request.apiKey}`,
-        },
-        body: JSON.stringify(buildOpenAiCompatibleBody(request, true)),
-      },
-    );
-
-    if (!response.ok) {
-      const errorBody = await safeReadText(response);
-      throw new ProviderHttpError(
-        `${this.providerName} stream request failed with status ${response.status}`,
-        response.status,
-        this.providerName,
-        errorBody,
-      );
-    }
-    if (!response.body) {
-      throw new Error(`${this.providerName} returned empty stream body`);
-    }
-
-    yield* parseOpenAiCompatibleStream(response.body);
+  override async *chatStream(
+    request: ProviderChatRequest,
+  ): AsyncGenerator<StreamEvent> {
+    yield* streamOpenAiCompatibleChat(this.providerName, request, {
+      authorization: `Bearer ${request.apiKey}`,
+    });
   }
 
   /**

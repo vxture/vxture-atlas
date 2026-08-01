@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeOpenAiCompatibleResponse,
   resolveChatCompletionsEndpoint,
-} from "./doubao.provider";
+} from "./openai-compatible";
 import type { OpenAiCompatibleChatResponse } from "./openai-compatible.types";
 
 // ── resolveChatCompletionsEndpoint ────────────────────────────────────────────
