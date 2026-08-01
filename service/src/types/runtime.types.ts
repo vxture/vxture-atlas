@@ -201,6 +201,8 @@ export interface ProviderChatRequest {
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
   config?: ModelConfig;
+  /** 服务商行的 config；与 `config` 一起解析出 `wire` 描述符（见 providers/wire.ts）。 */
+  providerConfig?: ModelConfig;
 }
 
 export interface ProviderChatResponse extends TokenUsage {
@@ -248,6 +250,11 @@ export interface AiModelRecord {
   isActive: boolean;
   sort: number;
   config: ModelConfig | null;
+  /**
+   * 所属服务商行的 `config`（join 带出，非 model.models 的列）。
+   * `wire` 描述符的服务商级默认住在这里，由模型自己的 `config.wire` 覆盖。
+   */
+  providerConfig: ModelConfig | null;
   createdBy: string | null;
   updatedBy: string | null;
   createdAt: Date;

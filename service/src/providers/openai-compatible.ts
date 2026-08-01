@@ -5,6 +5,8 @@ import type {
   OpenAiToolCall,
 } from "./openai-compatible.types";
 import { openSseRequest, readSseMessages } from "./sse";
+import { OPENAI_WIRE_DEFAULTS } from "./wire";
+import type { ResolvedWire } from "./wire";
 import type {
   ChatMessage,
   FinishReason,
@@ -29,21 +31,34 @@ import type {
 export function buildOpenAiCompatibleBody(
   request: ProviderChatRequest,
   stream: boolean,
+  wire: ResolvedWire = OPENAI_WIRE_DEFAULTS,
 ): Record<string, unknown> {
+  const maxTokensParam = wire.paramMap["maxTokens"] ?? "max_tokens";
+
   const body: Record<string, unknown> = {
     model: resolveUpstreamModel(request),
     messages: request.messages.map(toWireMessage),
-    temperature: request.temperature,
-    max_tokens: request.maxTokens,
-    top_p: request.topP,
     stream,
   };
-  if (request.tools?.length) {
+
+  if (wire.supports.temperature) body.temperature = request.temperature;
+  if (wire.supports.topP) body.top_p = request.topP;
+  body[maxTokensParam] = request.maxTokens;
+
+  if (wire.supports.tools && request.tools?.length) {
     body.tools = request.tools.map(toWireTool);
   }
-  if (request.toolChoice !== undefined) {
+  if (wire.supports.toolChoice && request.toolChoice !== undefined) {
     body.tool_choice = toWireToolChoice(request.toolChoice);
   }
+
+  // usage 的 opt-in。不带这个，OpenAI 系上游流式默认不回 usage，
+  // 而 runtime.service 只在 done 携带 usage 时才写计量行 —— 漏掉它等于
+  // 这次流式调用完全不被计量（设计文档 §9 / TD-017）。
+  if (stream && wire.streamUsage === "stream_options") {
+    body.stream_options = { include_usage: true };
+  }
+
   return body;
 }
 
@@ -184,12 +199,13 @@ export async function* streamOpenAiCompatibleChat(
   providerName: string,
   request: ProviderChatRequest,
   headers: Record<string, string>,
+  wire: ResolvedWire = OPENAI_WIRE_DEFAULTS,
 ): AsyncGenerator<StreamEvent> {
   const body = await openSseRequest({
     providerName,
-    url: resolveChatCompletionsEndpoint(request.endpointUrl),
+    url: resolveChatCompletionsEndpoint(request.endpointUrl, wire.chatPath),
     headers,
-    body: buildOpenAiCompatibleBody(request, true),
+    body: buildOpenAiCompatibleBody(request, true, wire),
   });
 
   yield* parseOpenAiCompatibleStream(body);
@@ -287,10 +303,15 @@ export async function* parseOpenAiCompatibleStream(
   yield* flush();
 }
 
-export function resolveChatCompletionsEndpoint(endpointUrl: string): string {
-  if (endpointUrl.endsWith("/chat/completions")) {
+export function resolveChatCompletionsEndpoint(
+  endpointUrl: string,
+  chatPath: string | null = null,
+): string {
+  const suffix = chatPath ?? "/chat/completions";
+
+  if (endpointUrl.endsWith(suffix)) {
     return endpointUrl;
   }
 
-  return joinEndpoint(endpointUrl, "/chat/completions");
+  return joinEndpoint(endpointUrl, suffix);
 }

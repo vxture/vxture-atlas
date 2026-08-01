@@ -2,6 +2,7 @@ import { PrismaClient as PrismaClientImpl } from "./generated/prisma";
 import type {
   AiModelGrantRecord,
   AiModelRecord,
+  ModelConfig,
   ModelPolicyRecord,
   ModelPriceRuleRecord,
   ModelProviderRecord,
@@ -27,8 +28,8 @@ import type {
 // data_model_200_schema.md §2 has not landed yet - see TD-002/TD-005.
 
 /** model.models row (no `provider` scalar; provider derived from the joined providerRef). */
-export type AiModelRow = Omit<AiModelRecord, "provider"> & {
-  providerRef?: { providerCode: string } | null;
+export type AiModelRow = Omit<AiModelRecord, "provider" | "providerConfig"> & {
+  providerRef?: { providerCode: string; config: ModelConfig | null } | null;
 };
 
 /** provisioning.workspace_provisionings row (TD-003, C3 provisioning webhook receiver). */
