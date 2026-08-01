@@ -154,6 +154,9 @@ export class ModelRuntimeService {
               ? { toolChoice: request.toolChoice }
               : {}),
             ...(model.config != null ? { config: model.config } : {}),
+            ...(model.providerConfig != null
+              ? { providerConfig: model.providerConfig }
+              : {}),
           });
           const latencyMs = Date.now() - startedAt;
 
@@ -380,6 +383,9 @@ export class ModelRuntimeService {
               ? { toolChoice: request.toolChoice }
               : {}),
             ...(model.config != null ? { config: model.config } : {}),
+            ...(model.providerConfig != null
+              ? { providerConfig: model.providerConfig }
+              : {}),
           })) {
             if (event.type === "done" && event.usage) {
               lastUsage = event.usage;

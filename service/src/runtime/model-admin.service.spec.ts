@@ -170,6 +170,7 @@ describe("normalizeCreateModel", () => {
         ...VALID_BASE,
         keyReference: { source: "env", name: "TEST_MODEL_KEY" },
         config: { fallbackModelCodes: ["backup-model"] },
+        providerConfig: null,
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -627,6 +628,7 @@ function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
     isActive: true,
     sort: 100,
     config: null,
+    providerConfig: null,
     createdBy: null,
     updatedBy: null,
     createdAt: new Date("2026-06-06T00:00:00.000Z"),

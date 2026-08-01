@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 
 import { BaseProvider, joinEndpoint, resolveUpstreamModel } from "./base.provider";
 import { openSseRequest, readSseMessages } from "./sse";
+import { ANTHROPIC_WIRE_DEFAULTS, resolveWire } from "./wire";
 import type {
   ChatMessage,
   FinishReason,
@@ -161,14 +162,30 @@ function buildClaudeBody(
 function buildClaudeHeaders(
   request: ProviderChatRequest,
 ): Record<string, string> {
-  return {
-    "x-api-key": request.apiKey,
-    "anthropic-version": readStringConfig(
-      request.config,
-      "anthropicVersion",
-      "2023-06-01",
-    ),
-  };
+  const wire = resolveWire(
+    ANTHROPIC_WIRE_DEFAULTS,
+    request.providerConfig,
+    request.config,
+  );
+
+  const headers: Record<string, string> = { ...wire.headers };
+
+  // `config.anthropicVersion` 是 wire 描述符之前的写法，仍然优先 —— 存量数据
+  // 不该因为引入新约定而失效（设计文档 §6 的收编说明）。
+  const legacyVersion = request.config?.["anthropicVersion"];
+  if (typeof legacyVersion === "string" && legacyVersion.trim()) {
+    headers["anthropic-version"] = legacyVersion.trim();
+  }
+
+  if (request.apiKey && wire.authStyle !== "none") {
+    if (wire.authStyle === "bearer") {
+      headers.authorization = `Bearer ${request.apiKey}`;
+    } else {
+      headers["x-api-key"] = request.apiKey;
+    }
+  }
+
+  return headers;
 }
 
 /**
@@ -423,13 +440,4 @@ function buildClaudeMessages(messages: ChatMessage[]): ClaudeMessage[] {
     });
   }
   return result;
-}
-
-function readStringConfig(
-  config: Record<string, unknown> | undefined,
-  key: string,
-  fallback: string,
-): string {
-  const value = config?.[key];
-  return typeof value === "string" && value.trim() ? value : fallback;
 }
