@@ -52,7 +52,11 @@ function assertUuid(value: string, code: "INVALID_TENANT_ID" | "INVALID_APPLICAT
 // model.models dropped the `provider` varchar column; provider identity is now the joined
 // model_providers.provider_code. Every model read pulls it so AiModelRecord.provider stays populated.
 const PROVIDER_INCLUDE = {
-  providerRef: { select: { providerCode: true } },
+  // config comes along for the ride because the provider row is where a
+  // provider-wide `wire` descriptor lives (design doc section 6); the model's
+  // own config.wire overlays it. Selecting it here means no extra query on the
+  // request path.
+  providerRef: { select: { providerCode: true, config: true } },
 } as const;
 
 type UsagePersistenceInput = UsageLogInput & {
@@ -704,10 +708,17 @@ export class ModelRegistryRepository {
   }
 }
 
-/** model.models row → AiModelRecord, deriving `provider` from the joined provider_code. */
+/**
+ * model.models row → AiModelRecord, deriving `provider` and `providerConfig`
+ * from the joined provider row.
+ */
 function mapAiModel(row: AiModelRow): AiModelRecord {
   const { providerRef, ...rest } = row;
-  return { ...rest, provider: providerRef?.providerCode ?? "" };
+  return {
+    ...rest,
+    provider: providerRef?.providerCode ?? "",
+    providerConfig: providerRef?.config ?? null,
+  };
 }
 
 /** Drop the retired `provider` column before writing model.models. */

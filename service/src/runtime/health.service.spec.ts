@@ -53,6 +53,7 @@ function makeModel(overrides: Partial<AiModelRecord> = {}): AiModelRecord {
     isActive: true,
     sort: 0,
     config: null,
+    providerConfig: null,
     createdBy: null,
     updatedBy: null,
     createdAt: now,

@@ -8,6 +8,8 @@ import {
   streamOpenAiCompatibleChat,
 } from "./openai-compatible";
 import type { OpenAiCompatibleChatResponse } from "./openai-compatible.types";
+import { OPENAI_WIRE_DEFAULTS, resolveWire } from "./wire";
+import type { ResolvedWire } from "./wire";
 import type {
   ProviderChatRequest,
   ProviderChatResponse,
@@ -31,10 +33,12 @@ export class OpenAiCompatibleProvider extends BaseProvider {
   readonly providerName: string = "openai-compatible";
 
   async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
+    const wire = this.wireFor(request);
+
     const response = await this.postJson<OpenAiCompatibleChatResponse>(
-      resolveChatCompletionsEndpoint(request.endpointUrl),
-      authHeaders(request),
-      buildOpenAiCompatibleBody(request, false),
+      resolveChatCompletionsEndpoint(request.endpointUrl, wire.chatPath),
+      authHeaders(request, wire),
+      buildOpenAiCompatibleBody(request, false, wire),
     );
 
     return normalizeOpenAiCompatibleResponse(this.providerName, response);
@@ -43,18 +47,44 @@ export class OpenAiCompatibleProvider extends BaseProvider {
   override async *chatStream(
     request: ProviderChatRequest,
   ): AsyncGenerator<StreamEvent> {
+    const wire = this.wireFor(request);
+
     yield* streamOpenAiCompatibleChat(
       this.providerName,
       request,
-      authHeaders(request),
+      authHeaders(request, wire),
+      wire,
+    );
+  }
+
+  protected wireFor(request: ProviderChatRequest): ResolvedWire {
+    return resolveWire(
+      OPENAI_WIRE_DEFAULTS,
+      request.providerConfig,
+      request.config,
     );
   }
 }
 
 /**
- * 无 key 时不下发 Authorization 头 —— 内网自建端点（vLLM / Ollama）通常没有
- * bearer 鉴权，发一个 `Bearer undefined` 会被部分网关判成非法凭据而 401。
+ * 无 key 时不下发鉴权头 —— 内网自建端点（vLLM / Ollama）通常没有 bearer
+ * 鉴权，发一个 `Bearer undefined` 会被部分网关判成非法凭据而 401。
  */
-function authHeaders(request: ProviderChatRequest): Record<string, string> {
-  return request.apiKey ? { authorization: `Bearer ${request.apiKey}` } : {};
+function authHeaders(
+  request: ProviderChatRequest,
+  wire: ResolvedWire,
+): Record<string, string> {
+  const headers: Record<string, string> = { ...wire.headers };
+
+  if (!request.apiKey || wire.authStyle === "none") {
+    return headers;
+  }
+
+  if (wire.authStyle === "x-api-key") {
+    headers["x-api-key"] = request.apiKey;
+  } else {
+    headers.authorization = `Bearer ${request.apiKey}`;
+  }
+
+  return headers;
 }
