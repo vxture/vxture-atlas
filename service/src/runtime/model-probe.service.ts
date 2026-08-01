@@ -34,6 +34,23 @@ const PROBE_MAX_TOKENS = 16;
 const PROBE_TIMEOUT_MS = 20_000;
 const PROBE_PROMPT = "ping";
 
+/**
+ * 同一模型两次自检之间的最小间隔。
+ *
+ * 这里刻意**不加** `StepUpRequiredGuard`（owner 决策 2026-08-02）：自检不可逆、
+ * 不变更任何东西、不回显密钥，风险不是"凭据被盗用做变更"那种身份形状的；而
+ * 每点一次测试就要求一次 MFA，会毁掉 probe 存在的唯一理由 —— 那个"改配置 ->
+ * 测试 -> 再改"的循环。
+ *
+ * 真正要挡的是**频率**：前端死循环、连点、被拿到会话后反复调用。冷却期正好
+ * 对着这个形状。
+ *
+ * 局限要说清楚：这是**单实例内存**冷却，多实例部署下挡不住跨实例并发。它是
+ * 现阶段的止血，不是完整方案 —— 真正的分布式限流跟着设计里那块限流工作
+ * （rate-limiter-flexible + 共享后端）一起落地。
+ */
+const PROBE_COOLDOWN_MS = 10_000;
+
 export type ProbeMode = "chat" | "stream";
 
 export interface ModelProbeCheck {
@@ -84,6 +101,9 @@ export class ModelProbeService {
     private readonly requestLog: RequestLogService,
   ) {}
 
+  /** modelId -> 上一次自检开始的时刻。见 `PROBE_COOLDOWN_MS`。 */
+  private readonly lastProbeAt = new Map<string, number>();
+
   async probe(modelId: string): Promise<ModelProbeResult> {
     const model = await this.repository.findModelById(modelId);
     if (!model) {
@@ -94,6 +114,8 @@ export class ModelProbeService {
         { modelId },
       );
     }
+
+    this.assertNotCoolingDown(model.id);
 
     const requestId = `probe-${randomUUID()}`;
     // 这里有意不经过 quota.assertAllowed - 自检不属于任何租户，扣谁的额度都不对。
@@ -126,6 +148,37 @@ export class ModelProbeService {
 
     await this.recordProbe(model, requestId, result);
     return result;
+  }
+
+  /**
+   * 冷却期在**模型存在性校验之后**判定，且在真正发出上游请求之前记时 ——
+   * 记的是"开始",不是"结束",否则一个卡死 20 秒的自检会把冷却窗口拖长到
+   * 30 秒。
+   */
+  private assertNotCoolingDown(modelId: string): void {
+    const now = Date.now();
+    const previous = this.lastProbeAt.get(modelId);
+
+    if (previous !== undefined && now - previous < PROBE_COOLDOWN_MS) {
+      throw new ModelAdminException(
+        HttpStatus.TOO_MANY_REQUESTS,
+        "MODEL_ADMIN_PROBE_COOLDOWN",
+        `model ${modelId} was probed less than ${PROBE_COOLDOWN_MS}ms ago`,
+        { modelId, retryAfterMs: PROBE_COOLDOWN_MS - (now - previous) },
+      );
+    }
+
+    this.lastProbeAt.set(modelId, now);
+    this.pruneCooldowns(now);
+  }
+
+  /** Map 的规模天然被模型数量界定，顺手清掉过期项，不让它无限留存。 */
+  private pruneCooldowns(now: number): void {
+    for (const [id, at] of this.lastProbeAt) {
+      if (now - at >= PROBE_COOLDOWN_MS) {
+        this.lastProbeAt.delete(id);
+      }
+    }
   }
 
   private async runChat(
