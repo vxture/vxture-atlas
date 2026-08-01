@@ -217,6 +217,108 @@ function mergeStringMap(
   return Object.freeze(merged);
 }
 
+/**
+ * 写入时的严格校验（§6：写入严格、运行时宽松）。
+ *
+ * 返回问题列表，空数组表示通过。与 `resolveWire` 的宽松读取是刻意的一对：
+ * 未知键在**这里**被拒，所以运行时不会遇到它；而万一遇到（旧服务读新数据），
+ * 运行时忽略而不是停摆。
+ */
+export function validateWire(raw: unknown): string[] {
+  if (raw === undefined || raw === null) return [];
+
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return ["config.wire must be an object"];
+  }
+
+  const wire = raw as Record<string, unknown>;
+  const problems: string[] = [];
+
+  for (const key of Object.keys(wire)) {
+    if (!KNOWN_KEYS.has(key)) {
+      problems.push(
+        `config.wire.${key} is not a known key (allowed: ${[...KNOWN_KEYS].sort().join(", ")})`,
+      );
+    }
+  }
+
+  const version = wire["schemaVersion"];
+  if (version !== undefined) {
+    if (typeof version !== "number" || !Number.isInteger(version)) {
+      problems.push("config.wire.schemaVersion must be an integer");
+    } else if (version > WIRE_SCHEMA_VERSION) {
+      problems.push(
+        `config.wire.schemaVersion ${version} is newer than this service understands (${WIRE_SCHEMA_VERSION})`,
+      );
+    }
+  }
+
+  if (wire["chatPath"] !== undefined && typeof wire["chatPath"] !== "string") {
+    problems.push("config.wire.chatPath must be a string");
+  }
+
+  const auth = wire["auth"];
+  if (auth !== undefined) {
+    if (typeof auth !== "object" || auth === null || Array.isArray(auth)) {
+      problems.push("config.wire.auth must be an object");
+    } else {
+      const style = (auth as Record<string, unknown>)["style"];
+      if (style !== undefined && !AUTH_STYLES.has(style as WireAuthStyle)) {
+        problems.push(
+          `config.wire.auth.style must be one of: ${[...AUTH_STYLES].join(", ")}`,
+        );
+      }
+    }
+  }
+
+  const streamUsage = wire["streamUsage"];
+  if (
+    streamUsage !== undefined &&
+    !STREAM_USAGES.has(streamUsage as WireStreamUsage)
+  ) {
+    problems.push(
+      `config.wire.streamUsage must be one of: ${[...STREAM_USAGES].join(", ")}`,
+    );
+  }
+
+  const supports = wire["supports"];
+  if (supports !== undefined) {
+    if (
+      typeof supports !== "object" ||
+      supports === null ||
+      Array.isArray(supports)
+    ) {
+      problems.push("config.wire.supports must be an object");
+    } else {
+      for (const [key, value] of Object.entries(
+        supports as Record<string, unknown>,
+      )) {
+        if (!KNOWN_SUPPORTS.has(key as keyof WireSupports)) {
+          problems.push(`config.wire.supports.${key} is not a known capability`);
+        } else if (typeof value !== "boolean") {
+          problems.push(`config.wire.supports.${key} must be a boolean`);
+        }
+      }
+    }
+  }
+
+  problems.push(...validateStringMap(wire["headers"], "headers"));
+  problems.push(...validateStringMap(wire["paramMap"], "paramMap"));
+
+  return problems;
+}
+
+function validateStringMap(raw: unknown, label: string): string[] {
+  if (raw === undefined) return [];
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return [`config.wire.${label} must be an object`];
+  }
+
+  return Object.entries(raw as Record<string, unknown>)
+    .filter(([, value]) => typeof value !== "string")
+    .map(([key]) => `config.wire.${label}.${key} must be a string`);
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }

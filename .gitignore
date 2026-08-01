@@ -68,3 +68,9 @@ __pycache__/
 # Scratch staging for pre-formalized design drafts. Anything that survives
 # review moves into docs/ under a number; nothing here is repo history.
 temp/
+
+# Prisma client generated into the source tree (schema.prisma `output`).
+# CI regenerates it in both the build and test-coverage jobs (`db:generate`),
+# so it is a build artifact, not source - and at ~29k lines it would drown
+# every diff that ran `git add -A` from the repo root.
+service/src/generated/
