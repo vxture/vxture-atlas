@@ -19,6 +19,7 @@ import { OpenAiCompatibleProvider } from "./providers/openai-compatible.provider
 import { PrivateModelProvider } from "./providers/private.provider";
 import { ModelRegistryRepository } from "./registry/model-registry.repository";
 import { ModelRegistryService } from "./registry/model-registry.service";
+import { ModelProbeService } from "./runtime/model-probe.service";
 import { ModelRouterService } from "./router/model-router.service";
 import { QuotaService } from "./quota/quota.service";
 import { EmbeddingController } from "./embedding/embedding.controller";
@@ -61,6 +62,7 @@ import { MetricsRegistry, metricsRegistry } from "./runtime/metrics.registry";
     ModelRegistryRepository,
     ModelRegistryService,
     ModelRouterService,
+    ModelProbeService,
     QuotaService,
     MeteringService,
     RequestLogService,

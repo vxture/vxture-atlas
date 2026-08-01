@@ -33,6 +33,8 @@ import {
   type UpdateModelPriceRuleBody,
   type UpdateModelProviderBody,
 } from "./model-admin.service";
+import { ModelProbeService } from "./model-probe.service";
+import type { ModelProbeResult } from "./model-probe.service";
 import type { ApplicationType } from "../types/runtime.types";
 
 // vxture-atlas naming plan (2026-07-28, TD-013): "model-platform" was a
@@ -53,6 +55,7 @@ import type { ApplicationType } from "../types/runtime.types";
 export class ModelAdminController {
   constructor(
     @Inject(ModelAdminService) private readonly admin: ModelAdminService,
+    @Inject(ModelProbeService) private readonly probe: ModelProbeService,
   ) {}
 
   /**
@@ -125,6 +128,17 @@ export class ModelAdminController {
     @Body() body: UpdateAiModelBody,
   ): Promise<AiModelAdminRecord> {
     return this.admin.updateModel(modelId, body);
+  }
+
+  /**
+   * 连通性自检。**会发起真实的上游调用并消耗 token**（上限 16），用量归平台
+   * 哨兵、不扣任何租户配额（设计文档 §12.2）。
+   */
+  @Post("models/:modelId/probe")
+  probeModel(
+    @Param("modelId") modelId: string,
+  ): Promise<ModelProbeResult> {
+    return this.probe.probe(modelId);
   }
 
   @Post("models/:modelId/activate")

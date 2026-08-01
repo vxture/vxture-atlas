@@ -44,6 +44,7 @@ The four provider-key mutation routes additionally require
 | GET | `/capability/protocols` | Wire-protocol vocabulary + each protocol's `config.wire` defaults - the management UI's dropdown source. Static, no tenant data (`docs/30-design/100-model-onboarding-and-protocol-adapters.md` §5/§10) |
 | GET/POST/PUT/DELETE | `/capability/providers[/:id[/activate\|deactivate]]` | Provider registry |
 | GET/POST/PUT/DELETE | `/capability/models[/:id[/activate\|deactivate]]` | Model registry |
+| POST | `/capability/models/:id/probe` | Connectivity self-check. **Makes a real upstream call** (capped at 16 output tokens, non-streaming + streaming). Reports reachability, the resolved adapter/protocol/`wire`, and **whether usage came back** - the signal that the model would otherwise go unmetered. Usage is attributed to the platform sentinel with `usage_type='test'`; no quota is consumed and nothing reaches the metering kernel |
 | GET/POST/PUT/DELETE | `/capability/grants[/:id[/activate]]` | Tenant/application grants, incl. `taskProfile` |
 | GET/POST/PUT/DELETE | `/capability/price-rules[/:id[/activate\|deactivate]]` | Pricing |
 | GET/POST/PUT | `/capability/policies[/:id[/activate\|deactivate]]` | Policy |
