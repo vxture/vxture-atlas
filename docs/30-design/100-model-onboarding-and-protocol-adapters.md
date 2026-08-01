@@ -15,6 +15,12 @@ API），不是一次代码变更与发版。
 这是有意的——把协议差异塞进配置，最终会长出一个没人能调试的 DSL。设计的
 价值在于**把边界划清楚**，而不是把边界消灭。
 
+**另一个非目标：Atlas 只计量，不计费**（owner 决策 2026-08-01）。Atlas 负责
+把"这次调用消耗了多少 token、属于谁"如实记下来；单价是运营定价的产物，落在
+`model_price_rules` 里由运营维护。请求路径上不算钱，`scripts/pricing/` 下的
+参考价目也只是运营设定价格时的输入，不是权威。本设计涉及 usage 的地方，一律
+只讨论**数量**归集，不讨论金额。
+
 ## 2. 现状：为什么必须改
 
 接入一家新服务商，今天要改三处代码并发一次版：
@@ -93,6 +99,7 @@ provider_code 硬编码的 Map。
 // model_providers.config（服务商级默认）
 {
   "wire": {
+    "schemaVersion": 1,                     // 必填，见 §12.4
     "chatPath": "/chat/completions",
     "auth": { "style": "bearer" },          // bearer | x-api-key | header
     "streamUsage": "stream_options",        // stream_options | native | none
@@ -124,6 +131,10 @@ provider_code 硬编码的 Map。
 在写入时就拒绝——否则这里会变成第二个"什么都能塞"的黑洞。校验放在
 `/capability/providers`、`/capability/models` 的写路径上，不是运行时。
 
+写入时严格、运行时宽松：运营改配置比服务发版快，一个旧版本服务读到新版本
+写入的键，应当忽略并告警，而不是让一个正在跑的模型停摆。`schemaVersion`
+就是这条规则的载体，见 §12.4。
+
 ## 7. 分发解析
 
 ```
@@ -146,26 +157,56 @@ Embedding-3 / rerank API），这些**不是** OpenAI Chat Completions 协议的
 code 通过 `ProviderChatRequest.providerCode`（新增字段）传入，用于错误信息与
 指标标签。
 
-## 8. 存量兼容与迁移
+## 8. 存量盘点（已执行）
 
-**风险**：线上 `model.models.protocol` 实际存什么值，本设计写作时无法查看。
-若存的是 `doubao` / `openai` / `v1` 这类，直接切换会让这些模型全部
-`MODEL_NOT_ROUTABLE`。
+盘点于 2026-08-01 在 `vxturestudio_platform_main` 的 `model` schema 上执行
+（数据层迁移到 `vxturestudio_modelruntime_main` 尚未进行，所以这里仍是权威
+现状）。
 
-因此**必须**保留 §7 第 3 步的回退，并分三步收紧：
+**`protocol` 取值**：
 
-1. **影子读**：上线分发改造，protocol 无法识别时回退到 provider_code Map，
-   打 WARN 日志并记一个计数指标 `atlas_router_protocol_fallback_total`。
-   此时行为与今天完全一致，零风险。
-2. **盘点与回填**：
-   ```sql
-   SELECT protocol, count(*) FROM model.models
-   WHERE deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC;
-   ```
-   按 §5 词表回填（通过 `/capability/models` 更新，不直接改库）。
-   以第 1 步的指标归零作为回填完成的判据。
-3. **收紧**：`/capability/models` 写路径开始校验 protocol 属于词表；回退层
-   保留但降级为异常路径。
+| protocol | 行数 |
+|---|---|
+| `openai` | 2 |
+| `anthropic` | 1 |
+
+**全量注册表**：
+
+| model_code | protocol | provider_code | model_type | config |
+|---|---|---|---|---|
+| `claude-sonnet-4` | anthropic | anthropic | chat | NULL |
+| `doubao-pro-32k` | openai | doubao | chat | NULL |
+| `gpt-4o` | openai | openai | chat | NULL |
+
+服务商 3 行（anthropic / doubao / openai），`config` 均为 NULL。
+grants **0** 行，policies **0** 行，price_rules 3 行且单价全为 0。
+
+**结论：迁移风险基本不存在。**
+
+- 两个取值都被 §5 的别名规则直接覆盖（`openai` -> `openai-chat-completions`，
+  `anthropic` -> `anthropic-messages`），无需人工回填。
+- 所有 `config` 为 NULL，没有任何存量 `wire` 或 `upstreamModel` 需要迁移。
+- 只有 3 个模型，回填即使需要也是分钟级。
+
+§7 第 3 步的回退层仍然保留，但**分三步收紧的节奏可以压缩**：本次盘点是开发
+库的时点快照，生产环境可能另有数据，回退层是针对这一不确定性的保险，而不是
+针对已知的脏数据。P3 可以紧随 P0，不必等一个观察期。
+
+### 盘点顺带发现的四件事
+
+1. **`gpt-4o` 目前路由到 `DoubaoProvider`。** 它的 `provider_code` 是
+   `openai`，而 `model-router.service.ts` 的 Map 把 `"openai"` 指向
+   `doubaoProvider`。能跑通纯粹因为两者都是 OpenAI 方言。这正是按厂商而非
+   按协议分发的症状——改造后这不再是一个碰巧成立的巧合，而是设计本身。
+2. **zhipu 和 private 一个都没注册。** 代码里有 `ZhipuProvider`（含真实的
+   embed/rerank 实现）和 `PrivateModelProvider`，注册表里没有对应的服务商或
+   模型。适配器存在不等于能力可用。
+3. **没有任何 embedding / rerank 类型的模型。** 三行全是 `model_type='chat'`。
+   所以 TD-003/TD-019 的 501 有两层原因：一层是 provider 没实现，另一层是
+   **注册表里根本没有这类模型**——即使 provider 实现了，也无从路由。
+4. **grants 为 0 行。** 授权表为空意味着当前没有任何租户能真正取到模型
+   （`resolveCandidateModels` 依赖 grant）。这与 policies 为 0（无限流配置）
+   一起说明：注册表目前处于"骨架已立、尚未投入运营"的状态。
 
 ## 9. 这个设计立刻暴露的一个真实缺陷
 
@@ -213,19 +254,35 @@ ADR-003）。
 | **P0** | 分发改造：protocol 主导 + 特例层 + 回退层 + 指标；`resolve()` 换签名，四个消费方同步 | 全量测试通过；回退指标可观测；行为与改造前一致 |
 | **P1** | `wire` 描述符落地：通用适配器读取 `chatPath`/`auth`/`supports`/`paramMap`；`stream_options` 按 `streamUsage` 下发 | 用 `wire` 配出一家新 OpenAI 方言服务商，零代码；§9 的 usage 缺陷闭环 |
 | **P2** | 管理面：`GET /capability/protocols`、写路径校验、`probe` 自检 | 平台侧能纯页面完成一次服务商+模型接入 |
-| **P3** | 存量收紧（§8 第 3 步） | 回退指标归零后启用严格校验 |
+| **P3** | 收紧：写路径按词表校验 protocol | 存量已确认可归一（§8），可紧随 P0 |
 
 P0 与 P1 之间可以发版，P0 本身不改变任何外部行为。
 
-## 12. 未决问题
+## 12. 已决问题（owner 决策 2026-08-01）
 
-1. **存量 protocol 取值**——§8 的盘点 SQL 需要一次真实执行，结果决定回填工
-   作量，也决定 P3 何时能做。
-2. **`probe` 的计费归属**——自检请求会真实消耗 token。计入哪个租户？建议
-   记为 `usage_type='test'`（`reqlog.request_records` 已有该取值），但归属
-   哪个 tenant 需要决定。
-3. **通用适配器的指标标签基数**——provider code 从类常量变成运行时值，
-   `component`/`provider` 标签的取值集合随注册表增长。需确认 Prometheus 侧
-   可接受。
-4. **`wire` schema 的版本演进**——封闭 schema 意味着新增键要发版。是否需要
-   一个 `wire.schemaVersion` 以便旧服务读新配置时安全降级。
+1. **存量 protocol 取值** —— 已盘点，见 §8。两个取值均可别名归一，无需回填，
+   P3 可紧随 P0。
+
+2. **`probe` 自检的用量归属** —— **归平台，不属于任何租户。**
+   自检请求写 `reqlog.request_records` 时：`usage_type='test'`，
+   `tenant_id` / `workspace_id` 使用 `COMMERCE_SENTINEL_UUID`
+   （`quota.service.ts:8` 已有的全零哨兵），且**不进入配额扣减、不上报平台
+   计量内核**。判据是：这次调用是 Atlas 自己的运维行为，不是任何租户的业务
+   行为，不能出现在任何租户的用量视图里。
+
+3. **通用适配器的指标标签基数** —— **按原方案推进，无需缓解措施。**
+
+   背景解释：Prometheus 里每一组不同的标签取值组合都会生成一条独立的时间
+   序列。`provider` 从类常量（4 个固定值）变成注册表驱动的运行时值后，序列
+   数会随注册的服务商数量增长。这类问题真正会出事是在标签取值达到成千上万
+   时（典型反例是把 user_id 或 request_id 当标签）。
+
+   当前注册表 3 个服务商，可预见的规模是几十个量级，与危险区差三个数量级。
+   决策：正常推进；仅当注册服务商数超过约 100 时再重新评估。**前提是
+   provider code 来自注册表（受控集合），绝不能把 model_code 或任何用户可控
+   字符串放进标签**——这条写进实现约束。
+
+4. **`wire` schema 版本** —— **需要。** `wire.schemaVersion` 为必填整数，
+   当前值 `1`。适配器读到高于自己支持的版本时，降级为忽略不认识的键并打
+   WARN，而不是拒绝服务——运营改配置的速度会快于服务发版，读不懂的新键不应
+   该让一个已经在跑的模型停摆。
