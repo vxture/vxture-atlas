@@ -38,18 +38,20 @@ routers, seed catalog, old-code removal) is tracked there, not here.
 - [x] Contract layer for A1 embed / A2 parse / A3 rerank; A1+A3 served by Zhipu
 - [x] Model onboarding P0 - dispatch by `protocol`, not `provider_code`
 - [x] Model onboarding P1 - `config.wire` descriptor, opt-in streaming usage
+- [x] Model onboarding P2 - `GET /capability/protocols`, `config.wire` schema
+      validation on the write path, `POST /capability/models/:id/probe`
+      self-check. Onboarding is now a page operation end to end.
+- [x] Upstream calls carry an `AbortSignal` with a time-to-first-byte guard,
+      so a provider that never answers no longer pins a socket
 
 ## To do
 
 Model onboarding (`docs/30-design/100-model-onboarding-and-protocol-adapters.md`):
 
-- [ ] P2 - `GET /capability/protocols`, `config.wire` schema validation on the
-      write path, `POST /capability/models/:id/probe` self-check. This is what
-      makes a provider onboarding purely a page operation.
-      **Order of operations**: `protocol` only became writable with the
-      `98_column_locks.sql` rule of 2026-08-06 (TD-025), and a grant is not
-      real until `db-init.yml` has run against that environment. Run db-init
-      before opera exposes the protocol dropdown, per environment.
+- [ ] Run `db-init.yml` per environment before opera exposes the protocol
+      dropdown. `protocol` only became writable with the `98_column_locks.sql`
+      rule of 2026-08-06 (TD-025), and a grant is not real until db-init has
+      applied it. Out of order, the dropdown returns an opaque 500.
 - [ ] P3 - drop the `provider_code` fallback layer in the router. The write
       path already validates `protocol` against the closed vocabulary and
       normalizes aliases on the way in (P2a), so the remaining work is the
