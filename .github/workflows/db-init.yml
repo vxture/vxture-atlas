@@ -185,7 +185,7 @@ jobs:
             fi
             sed -i -E "s#(^DATABASE_URL=\"?postgresql://atlas_svc:)[^@]*@#\1${svc_pw}@#" "$ENV_FILE"
             echo "[db-init] no svc password in .env; generated one and patched DATABASE_URL"
-            docker restart "${PRODUCT_CODE}-app" >/dev/null 2>&1 || true
+            docker restart "vx-${PRODUCT_CODE}-app-${DEPLOY_ENV}" >/dev/null 2>&1 || true
           fi
           # Pipe the ALTER over stdin (never argv) so the password stays out of ps.
           esc="$(printf '%s' "$svc_pw" | sed "s/'/''/g")"

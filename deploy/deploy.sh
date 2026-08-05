@@ -40,6 +40,7 @@ PROJECT_NAME="${PRODUCT_CODE}"
 # passes it from the deploy tag; a bare invocation on the host is a production
 # stack, so default to prod rather than to the compose-file default of dev.
 DEPLOY_ENV="${DEPLOY_ENV:-prod}"
+APP_CONTAINER="vx-${PRODUCT_CODE}-app-${DEPLOY_ENV}"
 APP_PORT="3100"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
@@ -91,7 +92,7 @@ cmd_verify() {
   local tries=0
   local payload=""
   until [ "$tries" -ge 20 ]; do
-    if payload="$(docker exec "${PROJECT_NAME}-app" wget -qO- "http://127.0.0.1:${APP_PORT}/healthz" 2>/dev/null)"; then
+    if payload="$(docker exec "$APP_CONTAINER" wget -qO- "http://127.0.0.1:${APP_PORT}/healthz" 2>/dev/null)"; then
       log "verify OK (health 200)"
       verify_identity "$payload"
       return 0

@@ -3,17 +3,20 @@
 # docs/30-design/00-index.md for why this is not a shared-platform-DB schema
 # and not a vxturebiz_atlas_{env}-style business-plane DB either).
 #
-# Every name derives from PRODUCT_CODE, so nothing here is atlas-specific:
-# PROJECT_NAME drives the compose project and the app container, while the db
-# container additionally carries DEPLOY_ENV so prod and beta never collide on
-# one host. No redis service until OIDC_RP_ENABLED=on (see .env.example)
+# Every container name derives from PRODUCT_CODE and DEPLOY_ENV, so nothing
+# here is atlas-specific and prod/beta/dev never collide on one host:
+#   vx-<code>-app-<env>            the service
+#   vx-<code>-postgres-db-<env>    its datastore
+# The compose SERVICE names (app, db) stay short and are the network aliases
+# other containers resolve - so renaming a container never breaks a
+# DATABASE_URL. No redis service until OIDC_RP_ENABLED=on (see .env.example)
 # actually needs a session store - add it at that point as
 # `vx-<code>-redis-db-<env>`, same shape, `redis` in the engine segment.
 name: ${PROJECT_NAME:-atlas}
 
 services:
   app:
-    container_name: ${PROJECT_NAME:-atlas}-app
+    container_name: vx-${PRODUCT_CODE:-atlas}-app-${DEPLOY_ENV:-dev}
     build:
       context: .
       dockerfile: service/Dockerfile
