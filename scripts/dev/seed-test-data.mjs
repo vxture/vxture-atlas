@@ -50,7 +50,17 @@ const TENANT = {
   globex: "00000000-0000-4000-b000-000000002002",
   initech: "00000000-0000-4000-b000-000000002003",
   personal: "00000000-0000-4000-a000-000000000200",
+  personal2: "00000000-0000-4000-b000-000000002004",
 };
+const WORKSPACE = {
+  acme: "00000000-0000-4000-b000-000000003001",
+  globex: "00000000-0000-4000-b000-000000003002",
+  initech: "00000000-0000-4000-b000-000000003003",
+  personal: "00000000-0000-4000-a000-000000000210",
+  personal2: "00000000-0000-4000-b000-000000003004",
+};
+/** A stable fake agent id, so agent-scoped grants are exercised. */
+const AGENT = "00000000-0000-4000-c000-00000000a001";
 const OPERATOR = "00000000-0000-4000-a000-0000000000ff";
 
 // --------------------------------------------------------------------------
@@ -281,6 +291,40 @@ const MODELS = [
     config: {},
   },
   {
+    providerCode: "private",
+    modelCode: "layout-parse-v1",
+    modelType: "parse",
+    protocol: "openai-chat-completions",
+    modelName: "版面解析 (内网)",
+    description: "A2 - the registry entry TD-003 lacked; still 501 until a provider implements parseDocument",
+    endpointUrl: "http://100.76.219.48:8001",
+    capabilities: ["parse"],
+    supportsStreaming: false,
+    isActive: true,
+    sort: 25,
+    config: {},
+  },
+  {
+    providerCode: "doubao",
+    modelCode: "doubao-seed-2-0-lite-no-tools",
+    modelType: "chat",
+    protocol: "openai-chat-completions",
+    modelName: "豆包 Lite (禁用 tools)",
+    description: "Model-level config.wire deep-merged over the provider's - same account, narrower capability",
+    endpointUrl: ARK,
+    contextWindow: 262144,
+    maxOutputTokens: 32768,
+    capabilities: ["chat", "streaming"],
+    supportsStreaming: true,
+    isActive: true,
+    sort: 3,
+    config: {
+      managedKeyAlias: "primary",
+      upstreamModel: "doubao-seed-2-0-lite-260428",
+      wire: { supports: { tools: false, toolChoice: false } },
+    },
+  },
+  {
     providerCode: "zhipu",
     modelCode: "glm-4-legacy",
     modelType: "chat",
@@ -315,6 +359,11 @@ const GRANTS = [
   { tenant: "initech", modelCode: "claude-sonnet-4", taskProfile: "long-context", priority: 10, isActive: false, reason: "模型未启用,授权先挂着" },
   { tenant: "personal", modelCode: "doubao-seed-2-0-lite-260428", taskProfile: "chat-default", priority: 10, reason: "个人租户试用" },
   { tenant: "personal", modelCode: "doubao-seed-2-0-pro-260215", taskProfile: null, priority: 100, expiresInDays: -3, reason: "已过期,用于验证过期不被选中" },
+  { tenant: "acme", modelCode: "layout-parse-v1", taskProfile: "document-parse", priority: 10, reason: "karda 文档加工管线" },
+  { tenant: "acme", modelCode: "doubao-seed-2-0-lite-no-tools", taskProfile: null, priority: 100, applicationId: AGENT, applicationType: "agent", reason: "指定 agent 专用,精确范围优先于租户通配" },
+  { tenant: "acme", modelCode: "doubao-seed-2-0-lite-260428", taskProfile: "chat-default", priority: 5, applicationId: AGENT, applicationType: "agent", reason: "同一画像下 agent 精确匹配,优先于上面的租户级 chat-default" },
+  { tenant: "globex", modelCode: "embedding-3", taskProfile: "embedding", priority: 10, reason: "第二个租户也做向量化" },
+  { tenant: "personal2", modelCode: "glm-5.2", taskProfile: "chat-default", priority: 10, expiresInDays: 30, reason: "限期试用,30 天后过期" },
 ];
 
 // --------------------------------------------------------------------------
@@ -329,6 +378,12 @@ const PRICES = [
   { modelCode: "deepseek-chat-v3", input: "0.50", output: "8.00" },
   { modelCode: "claude-sonnet-4", input: "21.00", output: "105.00", currency: "USD" },
   { modelCode: "qwen3-8b-internal", input: "0", output: "0" },
+  { modelCode: "layout-parse-v1", input: "0", output: "0", request: "0.05", billingMode: "request" },
+  { modelCode: "doubao-seed-2-0-lite-no-tools", input: "0.30", output: "3.00" },
+  // Price rules are versioned by append, not edited in place (98_column_locks
+  // grants UPDATE only on the lifecycle columns). This is last quarter's rate
+  // for the same model, expired rather than deleted.
+  { modelCode: "doubao-seed-2-0-lite-260428", input: "0.50", output: "4.00", expiredDaysAgo: 30 },
 ];
 
 // --------------------------------------------------------------------------
@@ -449,6 +504,7 @@ async function main() {
       data: {
         modelId: modelIds.get(g.modelCode),
         tenantId: TENANT[g.tenant],
+        applicationId: g.applicationId ?? null,
         applicationType: g.applicationType ?? null,
         taskProfile: g.taskProfile ?? null,
         priority: g.priority ?? 100,
@@ -472,7 +528,10 @@ async function main() {
         inputUnitPrice: p.input,
         outputUnitPrice: p.output,
         requestUnitPrice: p.request ?? "0",
-        isActive: true,
+        isActive: p.expiredDaysAgo === undefined,
+        ...(p.expiredDaysAgo === undefined
+          ? {}
+          : { effectiveAt: daysFromNow(-90), expiresAt: daysFromNow(-p.expiredDaysAgo) }),
         createdBy: OPERATOR,
         updatedBy: OPERATOR,
       },
@@ -520,6 +579,13 @@ async function main() {
   if (!realDoubao) throw new Error("DOUBAO_API_KEY is not set - .env.provider-keys missing?");
   const VAULT = [
     { providerCode: "doubao", keyAlias: "primary", secret: realDoubao, scope: "shared" },
+    // A retired key kept alongside the live one: same provider, different
+    // alias, inactive. Deactivating rather than deleting is what the rotation
+    // flow does, so the registry must be readable in that state.
+    { providerCode: "doubao", keyAlias: "retired-2026q2", secret: "fixture-doubao-old-key", scope: "shared", isActive: false },
+    // key_scope=dedicated: a key reserved for one tenant rather than shared
+    // across the provider.
+    { providerCode: "zhipu", keyAlias: "acme-dedicated", secret: "fixture-zhipu-dedicated", scope: "dedicated" },
     { providerCode: "zhipu", keyAlias: "primary", secret: "fixture-zhipu-key-not-real", scope: "shared" },
     { providerCode: "deepseek", keyAlias: "primary", secret: "fixture-deepseek-key-not-real", scope: "shared" },
     { providerCode: "anthropic", keyAlias: "primary", secret: "fixture-anthropic-key-not-real", scope: "shared" },
@@ -533,15 +599,76 @@ async function main() {
         encryptedKey,
         encryptionKeyId: activeId,
         keyScope: v.scope,
-        isActive: true,
+        isActive: v.isActive ?? true,
         lastRotatedAt: new Date(),
       },
     });
-    await prisma.keyRotationLog.create({
-      data: { providerApiKeyId: row.id, rotatedBy: OPERATOR, reason: "seeded by scripts/dev/seed-test-data.mjs" },
-    });
+    // Append-only rotation audit (no UPDATE granted on this table at all).
+    // The live doubao key gets a history, not a single row, so the log is
+    // exercised as a series rather than a one-off.
+    const history =
+      v.keyAlias === "primary" && v.providerCode === "doubao"
+        ? [
+            { reason: "initial onboarding", at: daysFromNow(-120) },
+            { reason: "quarterly rotation", at: daysFromNow(-30) },
+            { reason: "seeded by scripts/dev/seed-test-data.mjs", at: new Date() },
+          ]
+        : [{ reason: "seeded by scripts/dev/seed-test-data.mjs", at: new Date() }];
+    for (const h of history) {
+      await prisma.keyRotationLog.create({
+        data: {
+          providerApiKeyId: row.id,
+          rotatedBy: OPERATOR,
+          reason: h.reason,
+          rotatedAt: h.at,
+        },
+      });
+    }
   }
   console.log(`provider keys: ${VAULT.length} (doubao real, rest fixtures)`);
+
+  // C3 provisioning receiver state. The webhook is implemented and tested but
+  // its two tables had no seeded rows at all, so nothing exercised a read of
+  // them. Deliveries are the append-only idempotency ledger; the
+  // provisionings row is the per-workspace status with a monotonic seq.
+  await prisma.webhookDelivery.deleteMany({});
+  await prisma.workspaceProvisioning.deleteMany({});
+  const PROVISIONED = [
+    { key: "acme", status: "provisioned", seq: 3n },
+    { key: "globex", status: "provisioned", seq: 1n },
+    // Only pending/provisioned/deprovisioned exist - the DDL CHECK
+    // constraint rejects anything else, which is how it should be.
+    { key: "initech", status: "pending", seq: 5n },
+    { key: "personal2", status: "deprovisioned", seq: 2n },
+  ];
+  for (const w of PROVISIONED) {
+    await prisma.workspaceProvisioning.create({
+      data: {
+        workspaceId: WORKSPACE[w.key],
+        tenantId: TENANT[w.key],
+        productCode: "atlas",
+        status: w.status,
+        seq: w.seq,
+        provisionedAt: daysFromNow(-60),
+        ...(w.status === "deprovisioned" ? { deprovisionedAt: daysFromNow(-5) } : {}),
+      },
+    });
+    for (let i = 1n; i <= w.seq; i++) {
+      await prisma.webhookDelivery.create({
+        data: {
+          deliveryId: `seed-${w.key}-${i}`,
+          workspaceId: WORKSPACE[w.key],
+          productCode: "atlas",
+          eventType: i === 1n ? "workspace.provisioned" : "workspace.updated",
+          seq: i,
+          receivedAt: daysFromNow(-60 + Number(i)),
+        },
+      });
+    }
+  }
+  console.log(
+    `provisioning: ${PROVISIONED.length} workspaces, ${PROVISIONED.reduce((n, w) => n + Number(w.seq), 0)} webhook deliveries`,
+  );
 }
 
 main()

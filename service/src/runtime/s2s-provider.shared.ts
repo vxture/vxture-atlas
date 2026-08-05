@@ -148,6 +148,40 @@ export async function resolveGatedModel(
   return { model, provider, apiKey, requestId };
 }
 
+/**
+ * TD-022: build the request the gate and reqlog both see.
+ *
+ * A1/A2/A3 address the caller by `workspaceId`, but the two authorization
+ * axes are keyed differently and must not be conflated:
+ *
+ *   grant      `model.model_grants.tenant_id`   - a TENANT holds technical
+ *                                                 access to a model
+ *   entitlement platform C2 `quota_pools`       - a WORKSPACE holds quota
+ *
+ * These endpoints previously set `tenantId: request.workspaceId`, which put a
+ * workspace uuid in the tenant column, so no ordinary grant could ever match
+ * and every A1/A2/A3 call was `403 GRANT_DENIED`.
+ *
+ * The tenant comes from the verified token (`tenant_id`), never from a body
+ * field - product_210 rule 8, and the same precedence `withRequestLog`
+ * already uses for attribution, so the gate and the recorded row now agree
+ * for real rather than by coincidence. The request body is the fallback for
+ * callers that still send it; `workspaceId` continues to feed the
+ * entitlement check unchanged.
+ */
+export function toGateRequest<T extends { tenantId?: string; workspaceId?: string }>(
+  request: T,
+  auth?: S2sAuthContext,
+): T & { tenantId: string } {
+  const tenantId = auth?.tenantId ?? request.tenantId;
+  if (!tenantId) {
+    throw new BadRequestException(
+      "tenantId is required - the token carries no tenant_id claim and the request supplied none",
+    );
+  }
+  return { ...request, tenantId };
+}
+
 async function resolveModelCode(
   registry: ModelRegistryService,
   request: S2sProviderRequestBase,

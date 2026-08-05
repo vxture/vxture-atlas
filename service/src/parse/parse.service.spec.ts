@@ -69,6 +69,16 @@ function makeService(
 
 const PAGES = [{ pageIndex: 0, imageRef: "ref-1" }];
 
+/** A verified service-mode token: tenant and workspace are different ids, on
+ *  purpose - the grant axis is the tenant, the entitlement axis the workspace. */
+const AUTH = {
+  callerProductCode: "karda",
+  mode: "service" as const,
+  scope: "tool:atlas",
+  tenantId: "tenant-1",
+  workspaceId: "ws-1",
+};
+
 describe("ParseService.parse", () => {
   it("rejects when modelCode is missing", async () => {
     const { service } = makeService(makeModel());
@@ -78,7 +88,7 @@ describe("ParseService.parse", () => {
         task: "ocr",
         pages: PAGES,
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -91,7 +101,7 @@ describe("ParseService.parse", () => {
         task: "unknown-task" as any,
         pages: PAGES,
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -103,7 +113,7 @@ describe("ParseService.parse", () => {
         task: "ocr",
         pages: [],
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -115,7 +125,7 @@ describe("ParseService.parse", () => {
         task: "ocr",
         pages: [{ pageIndex: 0 }],
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -129,7 +139,7 @@ describe("ParseService.parse", () => {
         task: "ocr",
         pages: PAGES,
         workspaceId: "ws-1",
-      });
+      }, AUTH);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "MODEL_NOT_IMPLEMENTED" });
@@ -149,7 +159,7 @@ describe("ParseService.parse", () => {
       task: "ocr",
       pages: PAGES,
       workspaceId: "ws-1",
-    });
+    }, AUTH);
 
     expect(result).toEqual({
       task: "ocr",

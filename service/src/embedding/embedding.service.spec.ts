@@ -64,6 +64,16 @@ function makeService(model: AiModelRecord, providerOverrides: Partial<{
   return { service, registry, quota, router, provider, providerKeys };
 }
 
+/** A verified service-mode token: tenant and workspace are different ids, on
+ *  purpose - the grant axis is the tenant, the entitlement axis the workspace. */
+const AUTH = {
+  callerProductCode: "karda",
+  mode: "service" as const,
+  scope: "tool:atlas",
+  tenantId: "tenant-1",
+  workspaceId: "ws-1",
+};
+
 describe("EmbeddingService.embed", () => {
   it("rejects when modelCode is missing", async () => {
     const { service } = makeService(makeModel());
@@ -72,7 +82,7 @@ describe("EmbeddingService.embed", () => {
         modelCode: "",
         texts: ["hi"],
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -86,7 +96,7 @@ describe("EmbeddingService.embed", () => {
   it("rejects empty texts", async () => {
     const { service } = makeService(makeModel());
     await expect(
-      service.embed({ modelCode: "m", texts: [], workspaceId: "ws-1" }),
+      service.embed({ modelCode: "m", texts: [], workspaceId: "ws-1" }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -95,19 +105,19 @@ describe("EmbeddingService.embed", () => {
     const { service, registry, quota } = makeService(model);
 
     await expect(
-      service.embed({ modelCode: model.modelCode, texts: ["hi"], workspaceId: "ws-1" }),
+      service.embed({ modelCode: model.modelCode, texts: ["hi"], workspaceId: "ws-1" }, AUTH),
     ).rejects.toMatchObject({ code: "MODEL_NOT_IMPLEMENTED" });
 
     expect(registry.getActiveModel).toHaveBeenCalledWith(model.modelCode);
-    // Asserts the gating contract - the model, and workspaceId normalized to
-    // the tenant scope - rather than the exact arity, which TD-016 extended
-    // with an optional auth argument.
+    // Asserts the gating contract - the model, and the TENANT the grant lookup
+    // must use. TD-022: this previously asserted the workspace id, encoding the
+    // defect as the contract, which is why no unit test caught it.
     const [gatedModel, gatedRequest] = quota.assertAllowed.mock.calls[0] as [
       unknown,
       { tenantId: string },
     ];
     expect(gatedModel).toEqual(model);
-    expect(gatedRequest).toMatchObject({ tenantId: "ws-1" });
+    expect(gatedRequest).toMatchObject({ tenantId: "tenant-1" });
   });
 
   it("maps a not-implemented provider to a 501 MODEL_NOT_IMPLEMENTED error", async () => {
@@ -119,7 +129,7 @@ describe("EmbeddingService.embed", () => {
         modelCode: model.modelCode,
         texts: ["hi"],
         workspaceId: "ws-1",
-      });
+      }, AUTH);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "MODEL_NOT_IMPLEMENTED" });
@@ -140,7 +150,7 @@ describe("EmbeddingService.embed", () => {
       modelCode: model.modelCode,
       texts: ["hi"],
       workspaceId: "ws-1",
-    });
+    }, AUTH);
 
     expect(result).toEqual({
       modelCode: model.modelCode,

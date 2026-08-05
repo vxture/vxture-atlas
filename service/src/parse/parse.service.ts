@@ -8,6 +8,7 @@ import {
   resolveGatedModel,
   toS2sProviderError,
   withRequestLog,
+  toGateRequest,
 } from "../runtime/s2s-provider.shared";
 import { RequestLogService } from "../reqlog/request-log.service";
 import type { S2sAuthContext } from "../runtime/guards/s2s-auth.guard";
@@ -39,10 +40,9 @@ export class ParseService {
   ): Promise<ParseResponse> {
     this.validate(request);
 
-    // A1/A2/A3 address the caller by workspaceId; the gate (and reqlog) speak
-    // tenantId. Normalize once so the grant lookup and the recorded row agree -
-    // they must not disagree about who was charged for what.
-    const gateRequest = { ...request, tenantId: request.workspaceId };
+    // The gate keys grants by tenant and entitlement by workspace - see
+    // toGateRequest (TD-022).
+    const gateRequest = toGateRequest(request, auth);
 
     const gated = await resolveGatedModel(
       {
