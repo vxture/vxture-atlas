@@ -40,31 +40,23 @@ Unlike an "app profile" product (arda/karda/terra), Atlas does **not** get:
   asset-face product in the sharing-grant sense).
 - An `agent-server/` slot.
 
-What it DOES carry - as an **obligation**, which is not the same as "is
-implemented"; the 2026-07-28 audit found this list had drifted into claiming
-things that do not exist in code, so each item is now marked:
+What it DOES carry is an **obligation**, which is not the same as implemented.
+Per-module status is `docs/40-implementation/00-index.md`; open gaps are
+`docs/60-operations/10-tech-debt.md`. The obligations:
 
-- the full governance base - implemented
-- C3 provisioning webhook - implemented (signature verify, idempotency,
-  replay rejection, real persistence)
-- the S2S surface as a **caller** (outbound to Doubao/Claude/Zhipu/private) -
-  implemented
-- the S2S surface as a **provider**: `/v1/chat` + `/v1/models` implemented;
-  `/v1/embed` + `/v1/rerank` implemented via Zhipu only (any other provider
-  returns 501); **`/v1/parse` has no provider at all** and always 501s
-  (TD-003, TD-019)
+- the full governance base
+- C3 provisioning webhook
+- the S2S surface as a **caller** (outbound to Doubao/Claude/Zhipu/private)
+- the S2S surface as a **provider** (`/v1/*`)
+- C2 entitlement read ahead of every call
 - **C3 consume as the sole inference-metering entry point for every other
-  vxture product** (karda/arda/varda token usage all flows through Atlas, not
-  their own) - **designated but NOT implemented**: nothing is written to the
-  platform's metering kernel or to Atlas's own `reqlog` tables. This is the
-  single largest gap in the repo (TD-017); boundary design in
+  vxture product** - karda/arda/varda token usage flows through Atlas, not
+  their own metering; boundary design in
   `docs/30-design/210-usage-metering-and-history.md`
-- C2 entitlement client - **not implemented**; `PLATFORM_API_URL` is declared
-  but read by no code, so the quota gate fail-opens permanently (TD-016)
-- OIDC RP five endpoints - **not implemented**; no controller exists. Atlas
-  has no end-user browser surface, and the operator UI lives in
-  `vxture-platform`'s portals calling Atlas over the network, so this has
-  never been needed - but do not read the inherited obligation as done code
+- OIDC RP five endpoints - inherited but never built, and no controller
+  exists. Atlas has no end-user browser surface and the operator UI lives in
+  `vxture-platform`'s portals, so this has never been needed; do not read the
+  obligation as done code
 
 ## Name cascade (product code `atlas`)
 
@@ -85,19 +77,9 @@ HTTP paths are NOT part of this cascade - `/v1/*` (data plane) and
 
 ## Build status
 
-Extracted from vxture-platform (2026-07-24): the governance shell is
-scaffolded here; the actual `service/` source (the current
-`@vxture/service-model-platform` NestJS implementation) is migrated separately
-via `git filter-repo` to preserve history, not copied in with this scaffold -
-see `docs/70-workplan/00-index.md`.
-
-Not yet done: GitHub bootstrap, platform-side registration completion (host/
-worker allocation is still unassigned per the platform's infra-allocation
-registry), the data-layer migration (`model.*` tables + `key`/`reqlog`/
-`routing` into this repo's own DDL), the C2/C3 contract wiring to replace the
-direct cross-schema Prisma reads the in-monorepo service currently does, and
-the entire S2S provider surface (embedding/parse/rerank) that karda has
-already submitted requirements for (`docs/80-liaison/00-index.md`).
+Live in production on worker-02 with karda as a real S2S consumer. Do not
+restate status here - it goes stale. What is done and what is left:
+`docs/70-workplan/00-index.md`.
 
 ## Branch model
 
@@ -146,15 +128,12 @@ authoritative ruleset is `docs/50-deployment/rebuild/main-ruleset.json`.
 five contexts - renaming a job breaks branch protection. Never remove a check
 from the required set.
 
-**`bypass_actors` MUST stay empty.** Until 2026-07-28 the ruleset carried
-`RepositoryRole 5` (repo admin) with `bypass_mode: "always"`, which made every
-rule above advisory for admins - a direct `git push origin main` from an admin
-account succeeded silently, contradicting this file's own "direct push is
-BLOCKED" claim. Found the hard way: a push that should have been rejected went
-through (TD-020). Anyone with admin can still break glass by editing the
-ruleset - the difference is that doing so is a recorded config change instead
-of an invisible per-push exemption. Do not re-add a bypass actor to make an
-urgent merge easier.
+**`bypass_actors` MUST stay empty.** A bypass actor makes every rule above
+advisory for that actor, so a direct `git push origin main` succeeds silently -
+which is how this repo's "direct push is BLOCKED" claim was once false
+(TD-020). Admin can still break glass by editing the ruleset; the difference is
+that this is a recorded config change instead of an invisible per-push
+exemption. Do not re-add a bypass actor to make an urgent merge easier.
 
 ## CI/CD pipeline
 
@@ -173,8 +152,7 @@ urgent merge easier.
 
 The tag-to-env deploy workflows (`deploy.yml`/`build.yml`/`rollback.yml`/
 `db-init.yml`) and the `tailnet-ssh-connect` composite action follow the org
-CD reference pattern (vxture-arda) but are unexercised here until the GitHub
-and platform bootstrap checklists are done and a deploy host is assigned.
+CD reference pattern (vxture-arda). See `docs/50-deployment/00-index.md`.
 
 ## Secret hygiene (four layers)
 
@@ -207,6 +185,12 @@ map in `docs/00-meta/00-index.md`. Numbered = formal, unnumbered = temporary.
 
 ADRs live in `docs/30-design/decisions/` with stable append-only IDs; the
 tech-debt register lives in `docs/60-operations/10-tech-debt.md` (`TD-NNN`).
+
+Each document has one job. Design documents state the final design, not how it
+was reached; implementation documents state current status; the workplan is a
+done/to-do checklist. A decision is recorded once as an ADR and referenced
+elsewhere - do not restate its reasoning in a second file. History belongs in
+git, not in progress notes appended to documents.
 
 ## Rigid zone / blank zone
 

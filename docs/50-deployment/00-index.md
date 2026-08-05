@@ -1,130 +1,90 @@
-# 50-deployment - Infra, CI/CD, environments, bootstrap checklists
+# 50-deployment - Infra, CI/CD, environments
+
+Current deployment facts. The cross-repo authority for host allocation is
+`vxture-platform`'s `docs/50-deployment/13-infra-allocation-registry.md`; this
+file is the local view.
 
 ## Infra allocation
 
-Host assignment **owner-confirmed 2026-07-24** (see `docs/70-workplan/00-index.md`
-Phase 6). Still needs mirroring into vxture-platform's own
-`docs/50-deployment/13-infra-allocation-registry.md` product row (out of this
-repo's write-scope) before it's the cross-repo source of truth, and still
-needs real secrets/GitHub Environment before a deploy can actually run.
-
 | Item | Value |
 |------|-------|
-| Deploy host | **worker-02** (`100.76.219.48`, business host - same as arda/varda/vxtpl) |
+| Deploy host | worker-02 (`100.76.219.48`), shared with arda/varda/vxtpl |
 | Stack root | `/srv/md0/atlas` |
-| Published port | `3100` (fixed - inherited from the in-monorepo `model-platform` service; not a fresh `32X0/32X1` app-profile pair. No beta port yet - beta tier stays out per TD-001 until a dedicated beta host exists). Repo variable `APP_PUBLISH_PORT=3100` set 2026-07-26, matching `docker-compose.yml`'s existing default - this variable is only consumed by compose's port mapping (`${APP_PUBLISH_PORT:-3100}:3100`) on the host's own `.env`, not read anywhere in the GitHub workflows, so it doesn't need any CI-side wiring. |
-| Public domain | `atlas.vxture.com` (reserved, not bound - Atlas is tailnet-only today; no edge vhost is scaffolded here, unlike karda, because Atlas currently has no browser-facing surface for a vhost to protect) |
-| Tailnet | class 2 (same-apex platform tailnet fabric, per `product_230_mesh-architecture.md` D1) |
-| ACR namespace | **resolved 2026-07-26** - repo variable `ALIYUN_ACR_NAMESPACE=vx-foundation` set for vxture-atlas. Org-level `ALIYUN_ACR_REGISTRY` and the `ALIYUN_ACR_USERNAME`/`ALIYUN_ACR_PASSWORD` secrets were already shared to this repo (confirmed via `gh api orgs/vxture/actions/variables` 2026-07-26); this closes the last repo-side config gap for ACR-primary deploys. Still separately blocked on real `DEPLOY_*`/tailscale secrets and the `production` GitHub Environment (see below) before a deploy can actually run end to end. |
+| Published port | `3100` (inherited from the in-monorepo service, not an app-profile `32X0/32X1` pair). `APP_PUBLISH_PORT=3100` is consumed only by compose's port mapping on the host's own `.env` |
+| Public domain | `atlas.vxture.com` - reserved, not bound. Atlas is tailnet-only and has no browser surface, so no edge vhost is scaffolded |
+| Tailnet | class 2 (product_230 D1) |
+| ACR namespace | `ALIYUN_ACR_NAMESPACE=vx-foundation`; `ALIYUN_ACR_REGISTRY` and credentials are org-level |
+| Environments | `production` (required reviewer). No `beta` - see TD-001 |
 
-## Registry primary/fallback (deviates from governance default)
+Registry order is ACR primary, GHCR fallback -
+[ADR-005](../30-design/decisions/ADR-005-acr-primary-ghcr-fallback.md). Builds
+push to both; only the pull order differs.
 
-**Owner decision 2026-07-26: ACR primary, GHCR fallback** for worker-02
-(`.github/workflows/deploy.yml`, the remote deploy script's `IMAGE_REGISTRY`/
-`FALLBACK_IMAGE_REGISTRY` export). This is a deliberate deviation from
-`140-repo-governance-standard.md` section 5's default for non-VPC hosts (GHCR
-primary) - that default assumes ACR is only reachable over its paid public
-endpoint from a non-VPC host, with no guaranteed speed advantage over GHCR.
-The owner chose ACR-primary anyway for worker-02. If this is later found to
-be slower/costlier in practice than GHCR-primary (public ACR egress is
-billed; GHCR pulls are free), revisit here - this is a per-host operational
-choice, not itself a new governance rule, and does not need to propagate to
-sibling repos (arda/karda remain GHCR-primary on the same host) unless the
-owner decides otherwise.
+## Tag to environment
 
-Build (`build.yml`) always pushes to both registries regardless of which is
-primary - only the deploy-side pull order is affected.
+- `beta-YYYYMMDD.N` -> beta stack, no approval gate. Dormant (TD-001).
+- `vX.Y.Z` -> production, gated by a required reviewer on the `production`
+  GitHub Environment.
 
-## Docker registry mirror (base images, e.g. postgres)
+Merging to `main` deploys nothing. `dev-*` and `varda-*` tags are
+platform-repo-only.
 
-Already configured at the host-bootstrap level, not per-repo: worker-02's
-`/etc/docker/daemon.json` (`vxture-platform`'s
-`deploy-manual-init/bootstrap/11-bootstrap-host.sh`) sets
-`vp6xaxdh.mirror.aliyuncs.com` as the primary Docker Hub registry mirror
-(plus three fallback mirrors) - this speeds up pulling `postgres:16-alpine`
-(the only base image Atlas's stack pulls today; no nginx/redis service exists
-in `docker-compose.yml` yet, see its header comment). No Atlas-side change
-needed; worth a one-time ops check that this bootstrap script actually ran on
-worker-02.
+## Workflows
 
-## Old image cleanup
+`build.yml` / `deploy.yml` / `rollback.yml` / `db-init.yml` plus the
+`tailnet-ssh-connect` composite action, following the org CD reference pattern
+(vxture-arda). Every deploy publishes an immutable `sha-<short>` image tag;
+`deploy.sh`'s `cmd_all` prunes unreferenced images afterwards so the host disk
+does not accumulate them.
 
-`deploy/deploy.sh`'s `cmd_all` now runs `cmd_prune` (`docker image prune -af`)
-after a verified deploy, since every deploy publishes a new immutable
-`sha-<short>` app image tag (`build.yml`) that would otherwise accumulate on
-the host disk indefinitely. Only images with zero referencing containers are
-removed - the currently-running tag is never a candidate. This is separate
-from (and does not replace) the platform-wide `docker image prune -af` in
-`vxture-platform`'s `31-regular-upgrade-platform.sh` maintenance job, if that
-job also covers this host.
+DB structure changes run only through `db-init.yml` (`confirm=yes` +
+`expected_sha` + production approval) against `deploy/database/ddl/`. The
+routine deploy chain never runs migrations or seeds.
 
-## GitHub bootstrap (one-time, not yet done)
+## Secrets
 
-1. `git init` -> establish `main` -> first push -> let CI run once (produces
-   the five required check contexts) -> THEN apply
-   `docs/50-deployment/rebuild/main-ruleset.json`. Applying the ruleset first
-   blocks the initial import.
-2. Create GitHub Environments: `production` (required reviewer) and, once a
-   beta host exists, `beta` (no reviewer gate).
-3. Populate secrets/vars per `.env.example` and the workflow files under
-   `.github/workflows/` (`DEPLOY_WORKER02_HOST`/`DEPLOY_WORKER02_USER`/
-   `DEPLOY_WORKER02_SSH_KEY`/`DEPLOY_WORKER02_SSH_KEY_PASSPHRASE`/
-   `DEPLOY_WORKER02_KNOWN_HOSTS`/`DEPLOY_WORKER02_PORT`, `DEPLOY_DIR`,
-   `ALIYUN_ACR_*`, `TAILSCALE_OAUTH_*`, `NODE_AUTH_TOKEN`). The `DEPLOY_WORKER02_*`
-   secrets are org-level (renamed 2026-07-27 from the un-prefixed `DEPLOY_*`
-   names to make the target host explicit), shared to 10 repos deploying to
-   worker-02 (arda/karda/atlas + terra/ontos/runa + 4 agent repos) - this repo
-   only needs to be on the sharing allowlist, not populate them itself.
-   `DEPLOY_DIR` and `ENV_FILE_BASE64` stay per-product/repo-level (genuinely
-   product-specific, not a host-targeting concern) - not renamed.
-4. `DEPLOY_WORKER02_KNOWN_HOSTS` is mandatory (fail-closed in
-   `.github/actions/tailnet-ssh-connect`) - collect via
-   `ssh-keyscan -p <port> <host>` from a trusted network once the host exists.
+- `DEPLOY_WORKER02_*` (`HOST`/`USER`/`SSH_KEY`/`SSH_KEY_PASSPHRASE`/
+  `KNOWN_HOSTS`/`PORT`), `ALIYUN_ACR_*`, `TAILSCALE_OAUTH_*`, `NODE_AUTH_TOKEN`
+  are org-level, shared to the repos deploying to worker-02. This repo only
+  needs to be on the sharing allowlist.
+- `DEPLOY_DIR` and `ENV_FILE_BASE64` are per-repo - genuinely product-specific,
+  not host-targeting.
+- `DEPLOY_WORKER02_KNOWN_HOSTS` is mandatory and fail-closed in
+  `.github/actions/tailnet-ssh-connect`; collect it with
+  `ssh-keyscan -p <port> <host>` from a trusted network.
 
-## Platform-side registration (not yet done)
+## Provider API keys - separate env file
 
-See the karda A/B-segment precedent (`vxture-platform` repo,
-`docs/80-liaison/`) for the pattern: product catalog row, OIDC client, plan
-skeleton, provisioning webhook address, secret transport - all owner-gated,
-none of it agent-self-approved. As of this scaffold, the platform repo already
-carries a partial head start for atlas (OIDC client descriptor, base-URL env
-placeholders, product catalog row + 5-tier DRAFT plan skeleton) - see the
-platform repo's `deploy/database/seed/seed-catalog.mjs` and
-`docs/30-design/product_100_matrix.md` atlas row.
+Legacy `config.apiKeyEnvVar` keys (`DOUBAO_API_KEY` etc.) load from
+`<stack_root>/etc/.env.provider-keys`, a second `env_file:` entry
+(`APP_PROVIDER_KEYS_ENV_FILE`, `required: false`) kept **separate** from the
+general `<stack_root>/etc/.env`.
 
-## Provider API keys - separate env file (2026-07-28)
-
-Provider API keys (`DOUBAO_API_KEY` etc., the legacy `apiKeyEnvVar` path)
-load from `<stack_root>/etc/.env.provider-keys` - a file **separate** from
-the general operator `<stack_root>/etc/.env`, wired as a second
-`env_file:` entry in `docker-compose.yml` (`APP_PROVIDER_KEYS_ENV_FILE`,
-default `.env.provider-keys`, `required: false`).
-
-Why separate: `deploy.yml`'s bootstrap step only auto-creates
-`<stack_root>/etc/.env` from a GitHub secret on first deploy - it never
-touches this file. An operator creates it manually via SSH, which means it
-can carry stricter host permissions (`chmod 400`, owner-only) than the
-general `.env`, and its plaintext never transits GitHub Actions at all
-(unlike the bootstrapped `.env`, which arrives via a base64 `ENV_FILE_BASE64`
-secret). Smaller blast radius for the one class of secret that's
-runtime-hot (read on every model call) rather than deploy-time.
+Why separate: `deploy.yml` bootstraps `.env` from a GitHub secret on first
+deploy but never touches this file. An operator creates it over SSH, so it can
+carry stricter permissions (`chmod 400`) and its plaintext never transits
+GitHub Actions - a smaller blast radius for the one class of secret that is
+read on every model call.
 
 ```bash
-# on the deploy host, one-time setup:
 sudo touch /srv/md0/atlas/etc/.env.provider-keys
 sudo chmod 400 /srv/md0/atlas/etc/.env.provider-keys
-sudo nano /srv/md0/atlas/etc/.env.provider-keys   # add DOUBAO_API_KEY=<real key>
-cd /srv/md0/atlas && docker compose restart app    # env_file is read at container start
+sudo nano /srv/md0/atlas/etc/.env.provider-keys   # DOUBAO_API_KEY=<real key>
+cd /srv/md0/atlas && docker compose restart app   # env_file is read at container start
 ```
 
-TD-006's managed vault (`key.provider_api_keys`, envelope-encrypted,
-configured via `capability/provider-keys*`) is the target state
-and needs neither this file nor the main `.env` at all - this file only
-matters for models still on the legacy `config.apiKeyEnvVar` path.
+The managed vault
+([ADR-003](../30-design/decisions/ADR-003-provider-key-vault-envelope-encryption.md))
+is the target state and needs neither this file nor `.env`; this file only
+covers models still on the legacy path.
 
-## Deploy pipeline
+## Base-image mirror
 
-`deploy.yml` / `build.yml` / `rollback.yml` / `db-init.yml` and the
-`tailnet-ssh-connect` composite action follow the org CD reference pattern
-(vxture-arda). Authored but unexercised until the GitHub bootstrap and host
-assignment above are done.
+worker-02's `/etc/docker/daemon.json` (set by the platform's host bootstrap,
+not per-repo) uses an Aliyun Docker Hub mirror. Atlas's stack pulls only
+`postgres:16-alpine`.
+
+## Branch protection
+
+`rebuild/main-ruleset.json` is authoritative; apply via
+`gh api repos/vxture/vxture-atlas/rulesets`. `bypass_actors` must stay empty.
