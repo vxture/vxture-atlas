@@ -14,5 +14,10 @@
     "lint:docs-numbering": "node scripts/guardrails/check-docs-numbering.mjs --strict",
     "lint:data-design": "node scripts/guardrails/check-data-architecture.mjs --strict",
     "lint:workflows": "node scripts/guardrails/check-workflows.mjs --strict"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.23"
+    }
   }
 }

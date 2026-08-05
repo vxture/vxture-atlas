@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Query, Req, UseGuards } from "@nestjs/common";
 
 import { S2sAuthGuard } from "../runtime/guards/s2s-auth.guard";
 import type { S2sAuthenticatedRequest } from "../runtime/guards/s2s-auth.guard";
@@ -30,7 +30,14 @@ import type { AiModelRecord } from "../types/runtime.types";
 @Controller("tenancy")
 @UseGuards(S2sAuthGuard)
 export class TenancyController {
-  constructor(private readonly tenancy: TenancyService) {}
+  // Explicit @Inject: the deployed artifact is an esbuild bundle, which does
+  // not emit `design:paramtypes`, so constructor injection by type alone
+  // resolves to undefined at runtime even though tsconfig sets
+  // emitDecoratorMetadata and the unit tests (swc) pass.
+  constructor(
+    @Inject(TenancyService)
+    private readonly tenancy: TenancyService,
+  ) {}
 
   @Get("models")
   listModels(@Req() req: S2sAuthenticatedRequest): Promise<AiModelRecord[]> {
