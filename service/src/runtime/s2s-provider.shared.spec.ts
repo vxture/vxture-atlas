@@ -154,7 +154,10 @@ describe("toGateRequest", () => {
   });
 
   it("falls back to the request body when the token carries no tenant claim", () => {
-    const noTenant = { ...AUTH, tenantId: undefined };
+    // Omit the key rather than set it undefined - exactOptionalPropertyTypes
+    // treats those as different, and a personal tenant really does arrive
+    // with no tenancy claim at all (see 10-http-surface.md).
+    const { tenantId: _absent, ...noTenant } = AUTH;
     expect(toGateRequest({ tenantId: "tenant-9" }, noTenant).tenantId).toBe("tenant-9");
   });
 
