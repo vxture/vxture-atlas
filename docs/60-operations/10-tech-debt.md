@@ -23,6 +23,8 @@ any entry, read the commit that closed it.
 | [TD-009](#td-009) | Grant admin UI has no `taskProfile` field | 2026-07-27 |
 | [TD-016](#td-016) | Quota gate stays permissive for uncovered workspaces | 2026-07-28 |
 | [TD-019](#td-019) | `atlas.parse` cannot be advertised honestly | 2026-07-28 |
+| [TD-022](#td-022) | Embed / parse / rerank look up grants by workspace id in the tenant column | 2026-08-05 |
+| [TD-023](#td-023) | The esbuild bundle drops `design:paramtypes`, so type-only DI silently resolves to undefined | 2026-08-05 |
 
 ## Closed
 
@@ -146,3 +148,57 @@ descriptor stays in source behind a flag, so restoring it is a one-line change.
 
 **Recovery**: a real parse provider (`vxture-atlas`#38), or a maturity field on
 the descriptor (`vxture-platform`#159).
+
+## TD-022
+
+**Wrong**: `embedding.service.ts`, `parse.service.ts` and `rerank.service.ts`
+each build their gate request as
+`{ ...request, tenantId: request.workspaceId }`. The comment calls this a
+normalization, but it puts a **workspace** id into the column the grant lookup
+matches against `model_grants.tenant_id`. No ordinary grant can match, so every
+A1/A2/A3 call is `403 GRANT_DENIED` - including the embed and rerank paths that
+are otherwise fully implemented against Zhipu.
+
+**How it shows**: identical model, tenant and token succeed on `/v1/chat` and
+are refused on `/v1/embed`, `/v1/rerank`, `/v1/parse`. Found 2026-08-05 by the
+local end-to-end smoke run (`scripts/dev/s2s-smoke.mjs`), not by unit tests -
+the service specs pass a mocked repository, so the id being wrong is invisible
+to them.
+
+**Why it was not caught earlier**: no consumer has driven A1/A3 end to end yet.
+karda's live test exercised A4 only.
+
+**Recovery**: decide the correct source and apply it to all three. The
+principled answer is the verified token's `tenant_id` claim, matching what
+`reqlog` and `/tenancy/*` already do and product_210 rule 8 - not a body field,
+and not the workspace id. Needs a decision because it changes behaviour on a
+published surface, then a test that uses a real grant rather than a mock.
+
+## TD-023
+
+**Wrong**: the deployed artifact is an esbuild bundle
+(`service/package.json` `build`), and esbuild does not implement
+`emitDecoratorMetadata` - it silently drops `design:paramtypes` even though
+`tsconfig.json` sets the flag. Any Nest constructor injected by type alone
+therefore resolves to `undefined` at runtime, and the endpoint 500s on first
+use with `Cannot read properties of undefined`.
+
+**Blast radius when found (2026-08-05)**: `MetricsRegistry` was additionally
+absent from `AtlasModule.providers`, so the service could not boot at all on
+`main` after the P0 dispatch change. Behind that, five controllers used
+type-only injection: embedding, rerank, parse, tenancy and **the C3
+provisioning webhook** - so `/tenancy/*` and `/provisioning/webhook` returned
+500 in any bundled build. Production (v0.1.17) predates the boot failure but
+carries the controller defect.
+
+**Why the tests did not catch it**: vitest transpiles with swc, which *does*
+emit the metadata, and the specs construct controllers directly. Nothing in CI
+boots the Nest container from the bundle.
+
+**Fixed** (`vxture-atlas`#96): `MetricsRegistry` provided as the existing
+process singleton, and explicit `@Inject()` added to all five controllers.
+
+**Still open**: nothing enforces this. A new controller written in the natural
+Nest style compiles, passes CI, and 500s in production. Options: a smoke step
+that boots `dist/main.cjs` and hits `/readyz` plus one route per controller, an
+esbuild decorator-metadata plugin, or a lint rule requiring `@Inject`.
