@@ -1,49 +1,45 @@
 # 00-meta - Documentation map
 
-Top-level index for this repository's `docs/`. The tree follows the org docs
-taxonomy (`070-docs-taxonomy.md`) for the shared skeleton - ten decade-numbered
-top directories, `00-index.md` in every directory, numbered files and
-directories, numbered = formal / unnumbered = temporary.
+The tree follows the org docs taxonomy (`070-docs-taxonomy.md`): ten
+decade-numbered directories, `00-index.md` in each, numbered = formal /
+unnumbered = temporary. In-repo organization is delegated to this repo
+(taxonomy section 3) and defined in
+[`10-docs-convention.md`](./10-docs-convention.md), enforced by
+`pnpm lint:docs-numbering --strict` in CI.
 
-How documents are numbered and organized INSIDE this repo is delegated to the
-repo (taxonomy section 3): see **`10-docs-convention.md`** in this directory,
-the local authority. The platform repo's `{kind}_{domain}_{NNN}_{slug}` domain
-family is NOT used here - a single-domain repo separates by directory and
-number band instead. The `lint:docs-numbering --strict` guardrail enforces the
-convention (file names, directory names, root-only README whitelist) on every
-push.
+## What goes where
 
-| File | Purpose |
-|------|---------|
-| `10-docs-convention.md` | this repo's docs numbering and organization convention (local authority) |
+| Decade | Holds |
+|--------|-------|
+| `00-meta` | this map and the docs convention |
+| `10-standards` | thin index pointing at the org standards; no standard text is copied here |
+| `20-specs` | product specifications, incl. the authoritative HTTP surface |
+| `30-design` | architecture and domain design (`1xx` design / `2xx` contracts and schema / `3xx` implementation) plus `decisions/` (ADRs) |
+| `40-implementation` | module map and implementation status |
+| `50-deployment` | infra, CI/CD, environments, the branch-protection ruleset |
+| `60-operations` | runbooks (`NN-run-*.md`), audits, the tech-debt register |
+| `70-workplan` | the task checklist: done and to do |
+| `80-liaison` | archived liaison letters; the live channel is GitHub Issues |
+| `90-memory` | in-repo AI handoff |
 
-| Decade | Directory | Holds |
-|--------|-----------|-------|
-| `00-meta` | this directory | the docs map, the docs convention, meta-notes about the docs themselves |
-| `10-standards` | `10-standards/` | thin index pointing at the org standards (text lives in the platform repo, not copied here) |
-| `20-specs` | `20-specs/` | product/business specifications |
-| `30-design` | `30-design/` | architecture, ADRs, domain design, DB schema; three-digit bands `1xx` design / `2xx` contracts and schema / `3xx` implementation |
-| `40-implementation` | `40-implementation/` | package/layer guides, coding rules, dev setup |
-| `50-deployment` | `50-deployment/` | infra, CI/CD, environments, bootstrap checklists, the branch-protection ruleset |
-| `60-operations` | `60-operations/` | runbooks (`NN-run-*.md`), audits, the tech-debt register (`TD-NNN`), incidents |
-| `70-workplan` | `70-workplan/` | build plan and batch tracker |
-| `80-liaison` | `80-liaison/` | archived cross-org liaison history (reply letters, integration agreements) - channel retired 2026-07-27, new liaison goes through GitHub Issues (`liaison` label) per `140-repo-governance-standard.md` sec.10, see `80-liaison/00-index.md` |
-| `90-memory` | `90-memory/` | in-repo AI handoff (`10-agent.md`) |
+## Separation of concerns
+
+Design documents state the final design, not how it was arrived at.
+Implementation documents state current status. The workplan states what is done
+and what is left. Decisions are recorded once, as ADRs, and referenced
+elsewhere. The history of any of it is in git.
 
 ## Authority
 
-This repo carries the org governance base as an extraction from vxture-platform
-(product code `atlas`). The governing standards are NOT copied here; they live
-in the platform repo (`D:\MyWebSite\vxture`):
+The governing standards live in the platform repo (`D:\MyWebSite\vxture`), not
+here:
 
 - `docs/10-standards/140-repo-governance-standard.md` - governance base (WHAT)
-- `docs/10-standards/070-docs-taxonomy.md` - docs numbering (shared skeleton;
-  section 3 delegates in-repo organization to this repo)
+- `docs/10-standards/070-docs-taxonomy.md` - docs numbering
 - `docs/30-design/product_240_repo-template.md` - template design; section 3
-  matrix defines exactly which modules apply to atlas as an L1 product (not
-  the full app-profile set arda/karda/terra get)
-- `docs/50-deployment/rebuild/20-self-rectify-runbook.md` - runbook (HOW + checks)
+  defines which modules apply to atlas as an L1 product
+- `docs/50-deployment/rebuild/20-self-rectify-runbook.md` - runbook (HOW)
 
-A `product_NNN_*` / `data_*` / `design_*` reference anywhere in this repo's docs
-points at a PLATFORM-repo document, never a local one - local documents are
-always `NN(N)-slug`.
+A `product_NNN_*` / `data_*` / `design_*` reference anywhere in this repo's
+docs points at a PLATFORM-repo document. Local documents are always
+`NN(N)-slug`.
