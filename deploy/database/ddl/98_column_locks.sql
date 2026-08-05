@@ -42,11 +42,44 @@ GRANT UPDATE (provider_name, description, description_key, logo_url, homepage_ur
               is_workforce_visible, config, updated_by, updated_at, deleted_at)
   ON model.model_providers TO atlas_svc;
 
+-- models: the writable set is a rule, not a list. A column belongs to exactly
+-- one of four groups, and the group decides.
+--
+--   identity        model_code - never writable, AND never reusable. Deleting a
+--                   model is a soft delete, and uq_models_model_code is a plain
+--                   UNIQUE (not partial), so a deleted code stays taken forever.
+--                   That is deliberate: reqlog.request_records / error_records
+--                   and the routing.* tables reference a model by model_code as
+--                   plain text with no FK, so re-issuing a retired code would
+--                   silently re-attribute months of retained usage history to a
+--                   different model.
+--   upstream binding provider_id, endpoint_url, protocol, config - writable AS A
+--                   SET. They answer one question ("which upstream, reached how")
+--                   and repointing a model at a new upstream routinely means
+--                   changing several of them at once. Locking any one of them
+--                   makes a mis-onboarded model unrepairable - and because the
+--                   identity rule above forbids recreating it under the same
+--                   code, unrepairable means gone. `protocol` was missing from
+--                   this set until 2026-08-06 (TD-025); it was an omission from
+--                   before protocol became the dispatch key, not a decision.
+--                   Garbage input is kept out at the write path instead, where
+--                   the error is legible: the admin API validates protocol
+--                   against the closed vocabulary and config.wire against its
+--                   schema, and POST /capability/models/:id/probe verifies the
+--                   change against the real upstream.
+--   presentation    model_name, description*, capabilities, context_window,
+--                   max_output_tokens, supports_streaming, *_visible, sort.
+--   lifecycle       is_active, deleted_at, updated_by, updated_at.
+--
+-- model_type is in none of them: it selects which capability contract the model
+-- answers (chat / embedding / rerank), so changing it turns the row into a
+-- different kind of thing while its grants and price rules stay pointed at it.
 REVOKE UPDATE ON model.models FROM atlas_svc;
-GRANT UPDATE (provider_id, model_name, description, description_key, endpoint_url,
-              context_window, max_output_tokens, capabilities, supports_streaming,
-              is_active, is_customer_visible, is_workforce_visible, sort, config,
-              updated_by, updated_at, deleted_at)
+GRANT UPDATE (provider_id, endpoint_url, protocol, config,
+              model_name, description, description_key, capabilities,
+              context_window, max_output_tokens, supports_streaming,
+              is_customer_visible, is_workforce_visible, sort,
+              is_active, deleted_at, updated_by, updated_at)
   ON model.models TO atlas_svc;
 
 -- model_grants: model_id / tenant_id / application_id / application_type are the

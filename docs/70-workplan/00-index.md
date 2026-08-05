@@ -46,16 +46,19 @@ Model onboarding (`docs/30-design/100-model-onboarding-and-protocol-adapters.md`
 - [ ] P2 - `GET /capability/protocols`, `config.wire` schema validation on the
       write path, `POST /capability/models/:id/probe` self-check. This is what
       makes a provider onboarding purely a page operation.
-- [ ] P3 - validate `protocol` against the closed vocabulary on write, then
-      drop the `provider_code` fallback layer. **Normalize the existing rows
-      first**: all 7 production models carry `protocol = 'openai'`, a legal
-      alias today but not a vocabulary value, so tightening the write path
-      without normalizing them rejects the next update of any of them. The
-      normalization cannot go through `/capability/models` - `protocol` is
-      deliberately outside `98_column_locks.sql`'s UPDATE whitelist (verified:
-      the service role gets `42501 permission denied`), so it is a db-init
-      change like any other structural one. Confirm the beta/local registries
-      the same way before assuming the count is 7.
+      **Order of operations**: `protocol` only became writable with the
+      `98_column_locks.sql` rule of 2026-08-06 (TD-025), and a grant is not
+      real until `db-init.yml` has run against that environment. Run db-init
+      before opera exposes the protocol dropdown, per environment.
+- [ ] P3 - drop the `provider_code` fallback layer in the router. The write
+      path already validates `protocol` against the closed vocabulary and
+      normalizes aliases on the way in (P2a), so the remaining work is the
+      **existing rows**: all 7 production models carry `protocol = 'openai'`,
+      a legal alias but not a vocabulary value, so the fallback layer is what
+      keeps them routable. Normalize them through `PUT /capability/models/:id`
+      - one call per model, no db-init needed - then confirm the router logs
+      zero fallback warnings before removing the layer. Check the beta and
+      local registries the same way before assuming the count is 7.
 
 Provider surface (TD-003):
 
