@@ -1,12 +1,14 @@
-# Two-container stack for the services profile: <code>-app (NestJS) + <code>-db
-# (Atlas's own physical database, vxturestudio_modelruntime_main - see
+# Two-container stack for the services profile: <code>-app (NestJS) plus
+# vx-<code>-postgres-db-<env> (Atlas's own physical database - see
 # docs/30-design/00-index.md for why this is not a shared-platform-DB schema
-# and not a vxturebiz_atlas_{env}-style business-plane DB either). PROJECT_NAME
-# drives the compose project + container-name prefix so prod and beta never
-# collide on one host (prod=<code>-*, beta=<code>-beta-*). No redis service
-# until OIDC_RP_ENABLED=on (see .env.example) actually needs a session store -
-# add it back at that point, mirroring the app-profile template's redis
-# service. Structure/deploy details are exercised in the deployment batch.
+# and not a vxturebiz_atlas_{env}-style business-plane DB either).
+#
+# Every name derives from PRODUCT_CODE, so nothing here is atlas-specific:
+# PROJECT_NAME drives the compose project and the app container, while the db
+# container additionally carries DEPLOY_ENV so prod and beta never collide on
+# one host. No redis service until OIDC_RP_ENABLED=on (see .env.example)
+# actually needs a session store - add it at that point as
+# `vx-<code>-redis-db-<env>`, same shape, `redis` in the engine segment.
 name: ${PROJECT_NAME:-atlas}
 
 services:
@@ -57,14 +59,22 @@ services:
     restart: unless-stopped
 
   db:
-    container_name: ${PROJECT_NAME:-atlas}-db
+    # Both names derive from PRODUCT_CODE, so a sibling product repo gets its
+    # own pair by changing one variable:
+    #   container  vx-<code>-postgres-db-<env>   (env distinguishes dev/beta/prod
+    #              on one host; DEPLOY_ENV comes from the deploy tag, and is
+    #              `dev` for a local stack)
+    #   database   vx_<code>_postgres_db         (snake_case - a hyphen in a
+    #              Postgres identifier would force double quotes in every hand
+    #              written statement)
+    container_name: vx-${PRODUCT_CODE:-atlas}-postgres-db-${DEPLOY_ENV:-dev}
     image: postgres:16-alpine
     environment:
       # The container superuser is the DB OWNER, NOT the service role. The DDL
       # (db-init, as this owner) creates the least-privilege <code>_svc role that
       # the app connects as via DATABASE_URL (product_240 section 2.7: connect
       # identity = <code>_svc, never owner-direct).
-      POSTGRES_DB: ${POSTGRES_DB:-vxturestudio_modelruntime_main}
+      POSTGRES_DB: ${POSTGRES_DB:-vx_${PRODUCT_CODE:-atlas}_postgres_db}
       POSTGRES_USER: ${POSTGRES_DB_OWNER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:

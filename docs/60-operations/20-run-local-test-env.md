@@ -10,7 +10,7 @@ unreachable, the run fails rather than degrading.
 | Piece | Where | Notes |
 |---|---|---|
 | Atlas | host process, `:3100` | the port `admin-bff`'s `ATLAS_API_URL` defaults to |
-| Database | container `atlas-db` (compose project `atlas`) | published to `127.0.0.1:5432` by a socat sidecar; the compose service itself publishes no port |
+| Database | container `vx-atlas-postgres-db-dev` (compose project `atlas`) | published to `127.0.0.1:5432` by a socat sidecar; the compose service itself publishes no port |
 | Platform IdP | `auth-bff` on `:3090` | issuer is literally `http://localhost:3090`, which is why Atlas runs on the host rather than in a container - a container cannot reach that name |
 | Operator console | opera on `:3050` -> admin-bff `:3031` -> Atlas | opera mints operator tokens itself; nothing here needs to be configured for it |
 | Upstream | Volcano Ark | the only real provider; the key lives in `.env.provider-keys` |
@@ -23,20 +23,20 @@ To prove parity rather than assume it, apply the DDL into a scratch database
 and diff the dumps:
 
 ```bash
-docker exec atlas-db psql -U postgres -q -c "CREATE DATABASE atlas_ddl_verify;"
+docker exec vx-atlas-postgres-db-dev psql -U postgres -q -c "CREATE DATABASE atlas_ddl_verify;"
 for f in deploy/database/ddl/00_baseline.sql \
          deploy/database/ddl/97_service_role.sql \
          deploy/database/ddl/98_column_locks.sql \
          deploy/database/ddl/incr/*.sql; do
-  docker exec -i atlas-db psql -U postgres -d atlas_ddl_verify -q -v ON_ERROR_STOP=1 -f - < "$f"
+  docker exec -i vx-atlas-postgres-db-dev psql -U postgres -d atlas_ddl_verify -q -v ON_ERROR_STOP=1 -f - < "$f"
 done
 
-docker exec atlas-db pg_dump -U postgres -d vxturestudio_modelruntime_main \
+docker exec vx-atlas-postgres-db-dev pg_dump -U postgres -d vx_atlas_postgres_db \
   --schema-only --no-owner --no-comments -n key -n reqlog -n routing -n model -n provisioning > /tmp/cur.sql
-docker exec atlas-db pg_dump -U postgres -d atlas_ddl_verify \
+docker exec vx-atlas-postgres-db-dev pg_dump -U postgres -d atlas_ddl_verify \
   --schema-only --no-owner --no-comments -n key -n reqlog -n routing -n model -n provisioning > /tmp/fresh.sql
 diff /tmp/cur.sql /tmp/fresh.sql   # only pg_dump's random \restrict token should differ
-docker exec atlas-db psql -U postgres -q -c "DROP DATABASE atlas_ddl_verify;"
+docker exec vx-atlas-postgres-db-dev psql -U postgres -q -c "DROP DATABASE atlas_ddl_verify;"
 ```
 
 The dump includes GRANTs, so this also verifies the column locks
@@ -49,15 +49,15 @@ The dump includes GRANTs, so this also verifies the column locks
    compose file:
 
    ```bash
-   docker run -d --name atlas-db-fwd --network atlas-net -p 127.0.0.1:5432:5432 \
-     alpine/socat tcp-listen:5432,fork,reuseaddr tcp:atlas-db:5432
+   docker run -d --name vx-atlas-postgres-db-fwd --network atlas-net -p 127.0.0.1:5432:5432 \
+     alpine/socat tcp-listen:5432,fork,reuseaddr tcp:vx-atlas-postgres-db-dev:5432
    ```
 
 2. **Give the service role a password** (the DDL creates `atlas_svc` without
    one; production injects it at bootstrap):
 
    ```bash
-   docker exec atlas-db psql -U postgres -c "ALTER ROLE atlas_svc LOGIN PASSWORD '<local-password>';"
+   docker exec vx-atlas-postgres-db-dev psql -U postgres -c "ALTER ROLE atlas_svc LOGIN PASSWORD '<local-password>';"
    ```
 
 3. **Write `.env`** (git-ignored) at the repo root - `DATABASE_URL` pointing at

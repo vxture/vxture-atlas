@@ -16,7 +16,7 @@ routers, seed catalog, old-code removal) is tracked there, not here.
       `test-coverage` / `audit` / `gitleaks`); `main` ruleset applied with
       `bypass_actors: []`
 - [x] Source extracted from `vxture-platform` with history preserved
-- [x] Own physical database `vxturestudio_modelruntime_main` - 14 tables,
+- [x] Own physical database `vx_atlas_postgres_db` - 14 tables,
       three-part DDL, column locks, DDL/Prisma lockstep guardrail
 - [x] Deploy pipeline exercised end to end - worker-02:3100, ACR primary /
       GHCR fallback, `production` GitHub Environment, db-init, rollback

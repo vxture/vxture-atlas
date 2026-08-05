@@ -36,6 +36,10 @@ COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 PRODUCT_CODE="${PRODUCT_CODE:-atlas}"
 IMAGE_NAME="${PRODUCT_CODE}-app"
 PROJECT_NAME="${PRODUCT_CODE}"
+# Environment suffix for the db container (vx-<code>-postgres-db-<env>). CI
+# passes it from the deploy tag; a bare invocation on the host is a production
+# stack, so default to prod rather than to the compose-file default of dev.
+DEPLOY_ENV="${DEPLOY_ENV:-prod}"
 APP_PORT="3100"
 # Persistent data lives OUTSIDE the deploy dir (which is rsync --delete'd on every
 # deploy) - container-written data is root-owned and would otherwise break the
@@ -47,6 +51,7 @@ log() { echo "[deploy] $*"; }
 compose() {
   PRODUCT_CODE="$PRODUCT_CODE" \
   PROJECT_NAME="$PROJECT_NAME" \
+  DEPLOY_ENV="$DEPLOY_ENV" \
   DATA_DIR="$DATA_DIR" \
   APP_ENV_FILE="$ENV_FILE" \
   APP_PROVIDER_KEYS_ENV_FILE="$PROVIDER_KEYS_ENV_FILE" \

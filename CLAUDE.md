@@ -34,7 +34,7 @@ Unlike an "app profile" product (arda/karda/terra), Atlas does **not** get:
   domain schemas, template section 2.4) - Atlas is not an asset-face product,
   it has its own purpose-built data model (provider/model/grant/price_rule/
   policy + key/reqlog/routing) in its own physical database
-  `vxturestudio_modelruntime_main`, zero cross-database FK to the platform DB.
+  `vx_atlas_postgres_db`, zero cross-database FK to the platform DB.
 - `portals/` or any app-profile scaffolding.
 - C3 `grant.invalidated` or the visible-set recall filter (atlas is not an
   asset-face product in the sharing-grant sense).
@@ -60,16 +60,34 @@ Per-module status is `docs/40-implementation/00-index.md`; open gaps are
 
 ## Name cascade (product code `atlas`)
 
-OIDC client pair `atlas` / `atlas-beta`; compose project and container prefix
-`atlas-app` / `atlas-db`; image name `atlas-app`; workspace package
+OIDC client pair `atlas` / `atlas-beta`; compose project and app container
+`atlas-app`; image name `atlas-app`; workspace package
 `@atlas/service` (matching the sibling convention `@arda/app` / `@karda/app`;
 renamed 2026-07-28 from the inherited `@vxture/service-model-platform`, see
 TD-013); NestJS root module `AtlasModule`; health identity `service: "atlas"`
-and metrics label `component: "atlas"` (standard 025); database
-`vxturestudio_modelruntime_main` with service role `atlas_svc`; secrets
+and metrics label `component: "atlas"` (standard 025); service role
+`atlas_svc`; secrets
 `ATLAS_DB_SVC_PASSWORD`, `ATLAS_PROVISION_WEBHOOK_SECRET`,
 `ATLAS_WEBHOOK_BASE_URL`; public host `atlas.vxture.com` (reserved, not yet
 bound - Atlas is tailnet-only today, see docs/50-deployment/00-index.md).
+
+**Datastore names are their own derivation** (2026-08-05), because a product
+can run more than one and the engine has to be visible in the name:
+
+```
+container   vx-<product_code>-<engine>-db-<env>    vx-atlas-postgres-db-prod
+database    vx_<product_code>_<engine>_db          vx_atlas_postgres_db
+```
+
+`<product_code>` and `<env>` are derived (`PRODUCT_CODE`, `DEPLOY_ENV`);
+`<engine>` is a literal per compose service - `postgres` today, `redis` when a
+session store lands. The database name is snake_case on purpose: a hyphen in a
+Postgres identifier forces double quotes in every hand-written statement.
+Redis has no database-name concept, so only the container rule applies to it.
+
+Four places derive these and must agree - `docker-compose.yml`,
+`deploy/deploy.sh`, `db-init.yml`, and `deploy.yml`'s delivery check. A
+disagreement means db-init silently targets a database nobody runs against.
 
 HTTP paths are NOT part of this cascade - `/v1/*` (data plane) and
 `/capability/*` (operator plane) are deliberate, see

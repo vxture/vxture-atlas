@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 00_baseline.sql — Atlas DB baseline (vxturestudio_modelruntime_main)
+-- 00_baseline.sql — Atlas DB baseline (vx_atlas_postgres_db)
 -- Single-file DDL baseline, per the org product-repo DDL convention
 -- (00_baseline + 97_service_role + 98_column_locks + incr/, product_240
 -- section 2.4 E). Assembled from the pre-existing modelruntime DDL design in

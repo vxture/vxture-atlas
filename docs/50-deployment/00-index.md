@@ -20,6 +20,60 @@ Registry order is ACR primary, GHCR fallback -
 [ADR-005](../30-design/decisions/ADR-005-acr-primary-ghcr-fallback.md). Builds
 push to both; only the pull order differs.
 
+## Datastore naming
+
+```
+container   vx-<product_code>-<engine>-db-<env>    vx-atlas-postgres-db-prod
+database    vx_<product_code>_<engine>_db          vx_atlas_postgres_db
+```
+
+`<product_code>` comes from `PRODUCT_CODE` and `<env>` from `DEPLOY_ENV`
+(routed from the deploy tag; `dev` for a local stack). `<engine>` is a literal
+per compose service, so a second datastore is named the same way - a session
+store would be `vx-atlas-redis-db-prod`.
+
+Four places derive these independently and must agree: `docker-compose.yml`,
+`deploy/deploy.sh`, `db-init.yml`, and `deploy.yml`'s compose delivery check.
+
+## One-time rename on the production host (not yet done)
+
+Renaming in the repo does **not** rename anything on the host. `POSTGRES_DB` is
+read by the Postgres entrypoint only when it initializes an empty data
+directory, so an existing cluster keeps its old database name no matter what
+compose says. Deploying the rename without the steps below leaves the app
+pointing at a database that does not exist.
+
+Production today: container `atlas-db`, database `vxturestudio_modelruntime_main`.
+
+```bash
+# On worker-02, before deploying the tag that carries this rename.
+cd /srv/md0/atlas
+
+# 1. Stop the app so nothing holds a session on the database being renamed.
+#    ALTER DATABASE ... RENAME fails while any connection is open to it.
+docker stop atlas-app
+
+# 2. Rename the database in place. Data, roles and grants are untouched.
+docker exec atlas-db psql -U postgres -d postgres \
+  -c 'ALTER DATABASE vxturestudio_modelruntime_main RENAME TO vx_atlas_postgres_db;'
+
+# 3. Repoint the operator .env - BOTH the host segment and the database name.
+#    (host = the new container name, which is also its network alias)
+sudo sed -i -E 's#(DATABASE_URL=.*@)atlas-db(:5432/)vxturestudio_modelruntime_main#\1vx-atlas-postgres-db-prod\2vx_atlas_postgres_db#' etc/.env
+grep -o 'DATABASE_URL=.*@[^:]*:[0-9]*/[a-z_]*' etc/.env    # confirm before continuing
+```
+
+Then push the release tag. Compose recreates the `db` service under the new
+container name against the same data directory (`${DATA_DIR}/db`), and the app
+starts against the renamed database.
+
+Verify: `/readyz` reports `database: pass`, and
+`docker ps --format '{{.Names}}'` shows `vx-atlas-postgres-db-prod`.
+
+Rollback is the same three steps in reverse - the rename is reversible and
+touches no data. Do not run `db-init` between step 1 and the deploy: it now
+targets the new container name and would not find it.
+
 ## Tag to environment
 
 - `beta-YYYYMMDD.N` -> beta stack, no approval gate. Dormant (TD-001).
