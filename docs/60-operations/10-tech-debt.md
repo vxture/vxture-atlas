@@ -23,8 +23,8 @@ any entry, read the commit that closed it.
 | [TD-009](#td-009) | Grant admin UI has no `taskProfile` field | 2026-07-27 |
 | [TD-016](#td-016) | Quota gate stays permissive for uncovered workspaces | 2026-07-28 |
 | [TD-019](#td-019) | `atlas.parse` cannot be advertised honestly | 2026-07-28 |
-| [TD-022](#td-022) | Embed / parse / rerank look up grants by workspace id in the tenant column | 2026-08-05 |
-| [TD-023](#td-023) | The esbuild bundle drops `design:paramtypes`, so type-only DI silently resolves to undefined | 2026-08-05 |
+| [TD-023](#td-023) | Nothing stops the esbuild decorator-metadata trap recurring | 2026-08-05 |
+| [TD-024](#td-024) | `reqlog.request_records.usage_type` is never written | 2026-08-06 |
 
 ## Closed
 
@@ -44,6 +44,7 @@ any entry, read the commit that closed it.
 | TD-018 | `reqlog` partitions ran out 2027-01, then retention broke silently | 2026-07-28 |
 | TD-020 | Branch protection was advisory for repo admins | 2026-07-28 for atlas/platform |
 | TD-021 | `/capability/*` had no operator-identity verification | 2026-07-29 |
+| TD-022 | Embed / parse / rerank looked up grants by workspace id in the tenant column | 2026-08-06 |
 
 TD-020 remains open in karda / arda / template, tracked in those repos
 (`karda`#82, `arda`#187, `template`#37) - outside this repo's write-scope.
@@ -149,31 +150,6 @@ descriptor stays in source behind a flag, so restoring it is a one-line change.
 **Recovery**: a real parse provider (`vxture-atlas`#38), or a maturity field on
 the descriptor (`vxture-platform`#159).
 
-## TD-022
-
-**Wrong**: `embedding.service.ts`, `parse.service.ts` and `rerank.service.ts`
-each build their gate request as
-`{ ...request, tenantId: request.workspaceId }`. The comment calls this a
-normalization, but it puts a **workspace** id into the column the grant lookup
-matches against `model_grants.tenant_id`. No ordinary grant can match, so every
-A1/A2/A3 call is `403 GRANT_DENIED` - including the embed and rerank paths that
-are otherwise fully implemented against Zhipu.
-
-**How it shows**: identical model, tenant and token succeed on `/v1/chat` and
-are refused on `/v1/embed`, `/v1/rerank`, `/v1/parse`. Found 2026-08-05 by the
-local end-to-end smoke run (`scripts/dev/s2s-smoke.mjs`), not by unit tests -
-the service specs pass a mocked repository, so the id being wrong is invisible
-to them.
-
-**Why it was not caught earlier**: no consumer has driven A1/A3 end to end yet.
-karda's live test exercised A4 only.
-
-**Recovery**: decide the correct source and apply it to all three. The
-principled answer is the verified token's `tenant_id` claim, matching what
-`reqlog` and `/tenancy/*` already do and product_210 rule 8 - not a body field,
-and not the workspace id. Needs a decision because it changes behaviour on a
-published surface, then a test that uses a real grant rather than a mock.
-
 ## TD-023
 
 **Wrong**: the deployed artifact is an esbuild bundle
@@ -202,3 +178,20 @@ and explicit `@Inject()` added to all five controllers.
 Nest style compiles, passes CI, and 500s in production. Options: a smoke step
 that boots `dist/main.cjs` and hits `/readyz` plus one route per controller, an
 esbuild decorator-metadata plugin, or a lint rule requiring `@Inject`.
+
+## TD-024
+
+**Missing**: `reqlog.request_records.usage_type` is declared (`normal` / `retry`
+/ `test`) and every row written so far leaves it NULL. No writer sets it.
+
+**Why it matters before it hurts**: design 100's `probe` self-check - the
+thing that makes model onboarding a page operation rather than a
+configure-and-pray - is specified to write its calls with `usage_type='test'`
+and the all-zero sentinel tenant, precisely so operational traffic stays out
+of tenant usage views. Ship `probe` (P2) against a writer that cannot express
+`test` and every probe silently lands in a tenant's `/tenancy/usage`.
+
+**Recovery**: `RequestLogService` takes `usage_type` from its caller, chat
+passes `normal`, retries pass `retry`, and P2's probe passes `test`.
+`/tenancy/usage` then filters to `normal`/`retry`. Must land before or with
+P2, not after.

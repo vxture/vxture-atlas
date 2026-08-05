@@ -196,14 +196,50 @@ async function main() {
     pages: [{ pageIndex: 0, imageRef: "test" }],
     workspaceId: WORKSPACE,
   });
-  // Should be 501 (contract defined, no provider). It is 403 instead, because
-  // the A1/A2/A3 services overwrite tenantId with workspaceId before the grant
-  // lookup - TD-022. Asserted as-is so the suite stays green and honest; when
-  // TD-022 is fixed this flips and this expectation must be updated.
   check(
-    "/v1/parse is blocked by TD-022 before reaching its 501 boundary",
-    parse.status === 403 && parse.json?.code === "GRANT_DENIED",
+    "/v1/parse reaches its 501 boundary - contract defined, no provider",
+    parse.status === 501 && parse.json?.code === "MODEL_NOT_IMPLEMENTED",
     `${parse.status} ${parse.json?.code ?? ""}`,
+  );
+
+  // TD-022 regression guard. Before the fix these were 403 GRANT_DENIED,
+  // because the grant lookup matched a workspace id against tenant_id. Now
+  // they must fail no earlier than the provider call - 503 with the fixture
+  // key, or 2xx once a real Zhipu account is configured. A 403 here means
+  // the two authorization axes have been collapsed again.
+  const embed = await call("/v1/embed", token, {
+    modelCode: "embedding-3",
+    texts: ["hello"],
+    workspaceId: WORKSPACE,
+  });
+  check(
+    "A1 embed passes the grant gate and fails no earlier than the provider",
+    embed.status !== 403 && embed.status !== 404,
+    `${embed.status} ${embed.json?.code ?? ""}`,
+  );
+
+  const rerank = await call("/v1/rerank", token, {
+    modelCode: "rerank-v1",
+    query: "q",
+    candidates: [{ id: "1", text: "a" }],
+    workspaceId: WORKSPACE,
+  });
+  check(
+    "A3 rerank passes the grant gate and fails no earlier than the provider",
+    rerank.status !== 403 && rerank.status !== 404,
+    `${rerank.status} ${rerank.json?.code ?? ""}`,
+  );
+
+  const poolTooLarge = await call("/v1/rerank", token, {
+    modelCode: "rerank-v1",
+    query: "q",
+    candidates: Array.from({ length: 101 }, (_, i) => ({ id: String(i), text: "a" })),
+    workspaceId: WORKSPACE,
+  });
+  check(
+    "A3 rejects an over-size candidate pool instead of truncating",
+    poolTooLarge.status === 400,
+    `${poolTooLarge.status} ${poolTooLarge.json?.code ?? ""}`,
   );
 
   // --- discovery -----------------------------------------------------------

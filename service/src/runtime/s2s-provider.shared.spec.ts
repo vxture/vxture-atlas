@@ -1,7 +1,11 @@
 import { BadRequestException, HttpStatus } from "@nestjs/common";
 import { describe, it, expect, vi } from "vitest";
 
-import { resolveGatedModel, toS2sProviderError } from "./s2s-provider.shared";
+import {
+  resolveGatedModel,
+  toGateRequest,
+  toS2sProviderError,
+} from "./s2s-provider.shared";
 import { ProviderCapabilityNotImplementedError } from "../providers/base.provider";
 import { ModelRuntimeException } from "./runtime.errors";
 import type { AiModelRecord } from "../types/runtime.types";
@@ -117,5 +121,47 @@ describe("resolveGatedModel - task-profile routing", () => {
       resolveGatedModel(deps as never, { tenantId: "tenant-1" }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(deps.registry.getActiveModel).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TD-022. The two authorization axes are keyed differently - grants by tenant,
+ * entitlement by workspace - and the A1/A2/A3 endpoints used to collapse them
+ * by assigning workspaceId into tenantId, so no grant could ever match.
+ */
+describe("toGateRequest", () => {
+  const AUTH = {
+    callerProductCode: "karda",
+    mode: "service" as const,
+    scope: "tool:atlas",
+    tenantId: "tenant-1",
+    workspaceId: "ws-1",
+  };
+
+  it("takes the tenant from the verified token, never from workspaceId", () => {
+    const gate = toGateRequest({ workspaceId: "ws-1" }, AUTH);
+    expect(gate.tenantId).toBe("tenant-1");
+    expect(gate.tenantId).not.toBe(gate.workspaceId);
+  });
+
+  it("keeps workspaceId intact for the entitlement check", () => {
+    expect(toGateRequest({ workspaceId: "ws-1" }, AUTH).workspaceId).toBe("ws-1");
+  });
+
+  it("prefers the token over a caller-supplied tenantId", () => {
+    const gate = toGateRequest({ tenantId: "spoofed", workspaceId: "ws-1" }, AUTH);
+    expect(gate.tenantId).toBe("tenant-1");
+  });
+
+  it("falls back to the request body when the token carries no tenant claim", () => {
+    // Omit the key rather than set it undefined - exactOptionalPropertyTypes
+    // treats those as different, and a personal tenant really does arrive
+    // with no tenancy claim at all (see 10-http-surface.md).
+    const { tenantId: _absent, ...noTenant } = AUTH;
+    expect(toGateRequest({ tenantId: "tenant-9" }, noTenant).tenantId).toBe("tenant-9");
+  });
+
+  it("rejects rather than guessing when neither source has a tenant", () => {
+    expect(() => toGateRequest({ workspaceId: "ws-1" })).toThrow(BadRequestException);
   });
 });

@@ -70,6 +70,16 @@ function makeService(
 
 const CANDIDATES = [{ id: "c1", text: "candidate one" }];
 
+/** A verified service-mode token: tenant and workspace are different ids, on
+ *  purpose - the grant axis is the tenant, the entitlement axis the workspace. */
+const AUTH = {
+  callerProductCode: "karda",
+  mode: "service" as const,
+  scope: "tool:atlas",
+  tenantId: "tenant-1",
+  workspaceId: "ws-1",
+};
+
 describe("RerankService.rerank", () => {
   it("rejects when modelCode is missing", async () => {
     const { service } = makeService(makeModel());
@@ -79,7 +89,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: CANDIDATES,
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -91,7 +101,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: [],
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -108,7 +118,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: tooMany,
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toMatchObject({ code: "CANDIDATE_POOL_TOO_LARGE" });
   });
 
@@ -127,7 +137,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: exactly100,
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).resolves.toBeDefined();
   });
 
@@ -139,7 +149,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: [{ id: "", text: "a" }],
         workspaceId: "ws-1",
-      }),
+      }, AUTH),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -153,7 +163,7 @@ describe("RerankService.rerank", () => {
         query: "q",
         candidates: CANDIDATES,
         workspaceId: "ws-1",
-      });
+      }, AUTH);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "MODEL_NOT_IMPLEMENTED" });
@@ -173,7 +183,7 @@ describe("RerankService.rerank", () => {
       query: "q",
       candidates: CANDIDATES,
       workspaceId: "ws-1",
-    });
+    }, AUTH);
 
     expect(result).toEqual({
       modelCode: model.modelCode,
