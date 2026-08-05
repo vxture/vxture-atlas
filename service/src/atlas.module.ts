@@ -34,6 +34,7 @@ import { ProviderKeyController } from "./provider-keys/provider-key.controller";
 import { ProviderKeyService } from "./provider-keys/provider-key.service";
 import { ProviderKeyRepository } from "./provider-keys/provider-key.repository";
 import { DiscoveryController } from "./discovery/discovery.controller";
+import { MetricsRegistry, metricsRegistry } from "./runtime/metrics.registry";
 
 @Module({
   controllers: [
@@ -50,6 +51,10 @@ import { DiscoveryController } from "./discovery/discovery.controller";
     TenancyController,
   ],
   providers: [
+    // The process-wide singleton, not a fresh instance: MetricsController
+    // scrapes `metricsRegistry` directly, so a Nest-constructed second
+    // instance would collect the router's counters where nothing reads them.
+    { provide: MetricsRegistry, useValue: metricsRegistry },
     ModelRuntimeService,
     AtlasHealthService,
     ModelAdminService,
