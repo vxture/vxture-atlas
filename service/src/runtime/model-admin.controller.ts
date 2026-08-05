@@ -24,6 +24,7 @@ import {
   type ModelPolicyAdminRecord,
   type ModelPriceRuleAdminRecord,
   type ModelProviderAdminRecord,
+  type ProtocolCatalogResponse,
   type TenantQuotaAdminRecord,
   type TenantUsageSummaryAdminRecord,
   type UpdateAiModelBody,
@@ -53,6 +54,15 @@ export class ModelAdminController {
   constructor(
     @Inject(ModelAdminService) private readonly admin: ModelAdminService,
   ) {}
+
+  /**
+   * 可选的线协议及其 `wire` 默认值 —— 管理页面新增/编辑模型时的下拉数据源。
+   * 纯静态、无租户数据，但仍在 operator 面下，因为它暴露的是内部适配器能力。
+   */
+  @Get("protocols")
+  listProtocols(): ProtocolCatalogResponse {
+    return this.admin.getProtocolCatalog();
+  }
 
   @Get("providers")
   listProviders(

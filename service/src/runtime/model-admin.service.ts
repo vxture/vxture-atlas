@@ -1,6 +1,18 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import { ModelRegistryRepository } from "../registry/model-registry.repository";
+import {
+  MODEL_PROTOCOLS,
+  normalizeProtocol,
+  PROTOCOL_CATALOG,
+} from "../providers/protocol";
+import {
+  ANTHROPIC_WIRE_DEFAULTS,
+  OPENAI_WIRE_DEFAULTS,
+  validateWire,
+  WIRE_SCHEMA_VERSION,
+} from "../providers/wire";
+import type { ResolvedWire } from "../providers/wire";
 import { ModelAdminException } from "./model-admin.errors";
 import type {
   AiModelGrantRecord,
@@ -256,12 +268,47 @@ export type UpdateModelPolicyBody = Partial<
   Omit<CreateModelPolicyBody, "modelId">
 >;
 
+export interface ProtocolCatalogEntry {
+  protocol: string;
+  description: string;
+  knownUpstreams: string[];
+  aliases: string[];
+  wireDefaults: ResolvedWire;
+}
+
+export interface ProtocolCatalogResponse {
+  wireSchemaVersion: number;
+  protocols: ProtocolCatalogEntry[];
+}
+
 @Injectable()
 export class ModelAdminService {
   constructor(
     @Inject(ModelRegistryRepository)
     private readonly repository: ModelRegistryRepository,
   ) {}
+
+  /**
+   * 管理面下拉数据源：可选的 protocol，以及每个 protocol 的 `wire` 默认值。
+   *
+   * 之所以由服务端出而不是让前端硬编码：这份词表和默认值是**代码里的**事实，
+   * 硬编码到 portal 就意味着每次加一个 protocol 要改两个仓库、发两次版，
+   * 正是本设计要消除的那种耦合。
+   */
+  getProtocolCatalog(): ProtocolCatalogResponse {
+    return {
+      wireSchemaVersion: WIRE_SCHEMA_VERSION,
+      protocols: PROTOCOL_CATALOG.map((entry) => ({
+        ...entry,
+        knownUpstreams: [...entry.knownUpstreams],
+        aliases: [...entry.aliases],
+        wireDefaults:
+          entry.protocol === "anthropic-messages"
+            ? ANTHROPIC_WIRE_DEFAULTS
+            : OPENAI_WIRE_DEFAULTS,
+      })),
+    };
+  }
 
   async listProviders(
     includeInactive = true,
@@ -561,7 +608,7 @@ export class ModelAdminService {
       modelName: requiredString(body.modelName, "modelName"),
       provider: requiredString(body.provider, "provider"),
       endpointUrl: requiredUrl(body.endpointUrl, "endpointUrl"),
-      protocol: requiredString(body.protocol, "protocol"),
+      protocol: requiredProtocol(body.protocol),
       modelType: body.modelType ?? "chat",
       description: optionalString(body.description),
       contextWindow: optionalInt(body.contextWindow, "contextWindow"),
@@ -590,7 +637,7 @@ export class ModelAdminService {
     if (body.endpointUrl !== undefined)
       input.endpointUrl = requiredUrl(body.endpointUrl, "endpointUrl");
     if (body.protocol !== undefined)
-      input.protocol = requiredString(body.protocol, "protocol");
+      input.protocol = requiredProtocol(body.protocol);
     if (body.modelType !== undefined)
       input.modelType = requiredString(body.modelType, "modelType");
     if (body.description !== undefined)
@@ -1032,6 +1079,27 @@ function requiredString(value: unknown, field: string): string {
   return value.trim();
 }
 
+/**
+ * protocol 是分发键，不是自由文本 - 它决定用哪个适配器
+ * (docs/30-design/100-model-onboarding-and-protocol-adapters.md section 5)。
+ *
+ * 接受别名并归一化后落库：现网存量就是 `openai` / `anthropic` 这两个别名，
+ * 拒绝它们会让运营改一个无关字段时被绊住；归一化则让数据自己慢慢收敛。
+ */
+function requiredProtocol(value: unknown): string {
+  const raw = requiredString(value, "protocol");
+  const normalized = normalizeProtocol(raw);
+
+  if (!normalized) {
+    throwValidationError(
+      `protocol must be one of: ${MODEL_PROTOCOLS.join(", ")} (got "${raw}")`,
+      "protocol",
+    );
+  }
+
+  return normalized;
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -1294,6 +1362,14 @@ function sanitizeWritableConfig(
 ): ModelConfig | null {
   const sanitized = sanitizeModelConfig(config);
   if (sanitized === null) return null;
+
+  // 写入严格：`wire` 描述符的未知键在这里就被拒，运行时因此不会遇到它们
+  // (docs/30-design/100-model-onboarding-and-protocol-adapters.md section 6).
+  const problems = validateWire(sanitized["wire"]);
+  if (problems.length > 0) {
+    throwValidationError(problems.join("; "), "config.wire");
+  }
+
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 }
 
