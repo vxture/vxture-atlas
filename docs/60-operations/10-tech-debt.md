@@ -25,7 +25,6 @@ any entry, read the commit that closed it.
 | [TD-019](#td-019) | `atlas.parse` cannot be advertised honestly | 2026-07-28 |
 | [TD-023](#td-023) | Nothing stops the esbuild decorator-metadata trap recurring | 2026-08-05 |
 | [TD-024](#td-024) | `reqlog.request_records.usage_type` is never written | 2026-08-06 |
-| [TD-025](#td-025) | The model admin API accepts `protocol` on update, which the database refuses | 2026-08-06 |
 
 ## Closed
 
@@ -46,6 +45,7 @@ any entry, read the commit that closed it.
 | TD-020 | Branch protection was advisory for repo admins | 2026-07-28 for atlas/platform |
 | TD-021 | `/capability/*` had no operator-identity verification | 2026-07-29 |
 | TD-022 | Embed / parse / rerank looked up grants by workspace id in the tenant column | 2026-08-06 |
+| TD-025 | The model admin API accepted `protocol` on update, which the database refused | 2026-08-06, `98_column_locks.sql` states the `model.models` rule |
 
 TD-020 remains open in karda / arda / template, tracked in those repos
 (`karda`#82, `arda`#187, `template`#37) - outside this repo's write-scope.
@@ -197,29 +197,3 @@ passes `normal`, retries pass `retry`, and P2's probe passes `test`.
 `/tenancy/usage` then filters to `normal`/`retry`. Must land before or with
 P2, not after.
 
-## TD-025
-
-**Wrong**: `POST`/`PUT /capability/models` accepts `protocol` and passes it
-through to the update (`model-admin.service.ts`), but `protocol` is
-deliberately outside `98_column_locks.sql`'s UPDATE whitelist - it is closer
-to identity than to configuration, like `model_code`. Postgres therefore
-rejects the write with `42501 permission denied`, which surfaces to the
-operator as an opaque 500 rather than "this field cannot be changed".
-
-**Verified** 2026-08-06 against a real database, as the service role: an
-update touching `protocol` is refused, the same update touching `model_name`
-succeeds.
-
-**Blast radius**: only an update that *includes* `protocol` in the body. An
-operator editing other fields is unaffected, which is why it has not been hit
-- opera's form has no protocol field yet. It becomes reachable the moment P2
-adds the protocol dropdown, and P3's write-path validation would otherwise
-make it look like a validation failure rather than a permissions one.
-
-**Recovery**: decide which side is right and make both agree. Either drop
-`protocol` from the accepted update body (matching `model_code`, which the API
-already refuses to change) and require a new model row instead, or add it to
-the column whitelist if operators genuinely need to re-point an existing
-model at a different wire format. The first is more consistent with how the
-column locks treat identity; changing a model's protocol is not an edit, it is
-a different model.
