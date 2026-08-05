@@ -47,7 +47,15 @@ Model onboarding (`docs/30-design/100-model-onboarding-and-protocol-adapters.md`
       write path, `POST /capability/models/:id/probe` self-check. This is what
       makes a provider onboarding purely a page operation.
 - [ ] P3 - validate `protocol` against the closed vocabulary on write, then
-      drop the `provider_code` fallback layer.
+      drop the `provider_code` fallback layer. **Normalize the existing rows
+      first**: all 7 production models carry `protocol = 'openai'`, a legal
+      alias today but not a vocabulary value, so tightening the write path
+      without normalizing them rejects the next update of any of them. The
+      normalization cannot go through `/capability/models` - `protocol` is
+      deliberately outside `98_column_locks.sql`'s UPDATE whitelist (verified:
+      the service role gets `42501 permission denied`), so it is a db-init
+      change like any other structural one. Confirm the beta/local registries
+      the same way before assuming the count is 7.
 
 Provider surface (TD-003):
 
