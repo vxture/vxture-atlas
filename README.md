@@ -25,9 +25,9 @@ NestJS service under `service/`.
 | Thing | Value |
 |-------|-------|
 | OIDC clients | `atlas` / `atlas-beta` |
-| compose project / containers | `atlas-app` / `atlas-db` |
+| compose project / containers | project `atlas`; `atlas-app` + `vx-atlas-postgres-db-{dev\|beta\|prod}` |
 | image name | `atlas-app` |
-| database | `vxturestudio_modelruntime_main` (own physical DB, not a shared-platform-DB schema, not a business-plane `vxturebiz_atlas_{env}` DB either) |
+| database | `vx_atlas_postgres_db` in container `vx-atlas-postgres-db-{env}` (own physical DB, not a shared-platform-DB schema, not a business-plane `vxturebiz_atlas_{env}` DB either) |
 | service role | `atlas_svc` |
 | secrets | `ATLAS_DB_SVC_PASSWORD`, `ATLAS_PROVISION_WEBHOOK_SECRET`, `ATLAS_WEBHOOK_BASE_URL` |
 | public host | `atlas.vxture.com` (reserved, not bound - tailnet-only today) |

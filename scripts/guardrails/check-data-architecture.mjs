@@ -7,7 +7,7 @@
  * source and MUST stay in lockstep. This asserts that the set of tables declared
  * in the baseline DDL (00_baseline.sql, which for Atlas covers the model /
  * key / reqlog / routing schemas of its own physical database
- * vxturestudio_modelruntime_main - NOT the shared platform DB) equals the set
+ * vx_atlas_postgres_db - NOT the shared platform DB) equals the set
  * of Prisma models (matched by @@schema + @@map). Any drift fails under
  * --strict (CI).
  *

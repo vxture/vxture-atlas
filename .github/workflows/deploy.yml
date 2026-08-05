@@ -56,6 +56,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       environment: ${{ steps.route.outputs.environment }}
+      deploy_env: ${{ steps.route.outputs.deploy_env }}
     steps:
       - name: Route tag to GitHub Environment
         id: route
@@ -64,12 +65,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # Two values from one routing decision: `environment` is the GitHub
+          # Environment (approval gate), `deploy_env` is the short suffix the
+          # db container name carries (vx-<code>-postgres-db-<env>). They are
+          # deliberately different vocabularies - do not collapse them.
           case "$TAG" in
-            v*.*.*) environment=production ;;
+            v*.*.*) environment=production; deploy_env=prod ;;
             *) echo "deploy.yml triggered on unsupported tag: $TAG" >&2; exit 1 ;;
           esac
           echo "environment=$environment" >> "$GITHUB_OUTPUT"
-          echo "route: tag=$TAG -> environment=$environment"
+          echo "deploy_env=$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "route: tag=$TAG -> environment=$environment, deploy_env=$deploy_env"
 
   call-build:
     name: docker-build
@@ -97,6 +103,10 @@ jobs:
       issues: write
     environment:
       name: ${{ needs.detect.outputs.environment }}
+    env:
+      # Short env suffix carried by the db container name; routed from the tag
+      # in `detect` so there is one mapping, not one per consumer.
+      DEPLOY_ENV: ${{ needs.detect.outputs.deploy_env }}
     steps:
       - name: Checkout deploy sources
         uses: actions/checkout@v4
@@ -210,10 +220,11 @@ jobs:
 
           # Confirm the delivered compose carries a db service - catches a stale
           # or truncated compose being rsync'd before we start the stack. Grep
-          # the container_name TEMPLATE (`${PROJECT_NAME:-atlas}-db`), not the
-          # resolved literal name.
+          # the container_name TEMPLATE (`vx-${PRODUCT_CODE}-postgres-db-${DEPLOY_ENV}`),
+          # not the resolved literal name, and anchor on the engine segment so
+          # this keeps matching when a second datastore (redis) is added.
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "grep -qE 'container_name:.*-db$' '$deploy_dir/docker-compose.yml' && echo '[deliver] compose declares a db service' || { echo '[deliver] ERROR: delivered compose has no db service' >&2; exit 1; }"
+            "grep -qE 'container_name:.*-postgres-db-' '$deploy_dir/docker-compose.yml' && echo '[deliver] compose declares a postgres db service' || { echo '[deliver] ERROR: delivered compose has no postgres db service' >&2; exit 1; }"
           ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "printf '%s\n' '$PASSED_SHA' > '$deploy_dir/VERSION'"
 
           # Remote deploy script: registry primary/fallback for worker-02.
@@ -243,7 +254,8 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 /tmp/deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.sh"
 
           remote_env=(
-            "PRODUCT_CODE=$PRODUCT_CODE" "REPO_DIR=$deploy_dir" "IMAGE_TAG=$image_tag"
+            "PRODUCT_CODE=$PRODUCT_CODE" "DEPLOY_ENV=$DEPLOY_ENV"
+            "REPO_DIR=$deploy_dir" "IMAGE_TAG=$image_tag"
             "ALIYUN_ACR_REGISTRY=$ALIYUN_ACR_REGISTRY" "ALIYUN_ACR_NAMESPACE=$ALIYUN_ACR_NAMESPACE"
             "ALIYUN_ACR_USERNAME=$ALIYUN_ACR_USERNAME" "ALIYUN_ACR_PASSWORD=$ALIYUN_ACR_PASSWORD"
             "GHCR_USERNAME=$GHCR_USERNAME" "GHCR_TOKEN=$GHCR_TOKEN"

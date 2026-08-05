@@ -195,8 +195,8 @@ carries the controller defect.
 emit the metadata, and the specs construct controllers directly. Nothing in CI
 boots the Nest container from the bundle.
 
-**Fixed** (`vxture-atlas`#96): `MetricsRegistry` provided as the existing
-process singleton, and explicit `@Inject()` added to all five controllers.
+**Fixed here**: `MetricsRegistry` provided as the existing process singleton,
+and explicit `@Inject()` added to all five controllers.
 
 **Still open**: nothing enforces this. A new controller written in the natural
 Nest style compiles, passes CI, and 500s in production. Options: a smoke step

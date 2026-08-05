@@ -46,6 +46,9 @@ env:
   # UNSET here - it is the template's demo escape hatch, and setting it would
   # repoint the stack root, containers, and DB.
   PRODUCT_CODE: ${{ vars.PRODUCT_CODE || 'atlas' }}
+  # This workflow is pinned to the production Environment (see the job below),
+  # so the db container it targets is the prod one.
+  DEPLOY_ENV: prod
 
 jobs:
   db-init:
@@ -128,10 +131,13 @@ jobs:
           set -euo pipefail
           cd "$DDL_STAGE"
           echo "[db-init] DDL source: $DDL_STAGE (pinned $PINNED_SHA)"
-          # Atlas owns a fully separate physical database (vxturestudio_modelruntime_main),
-          # not a schema in the shared platform DB - see docs/30-design/00-index.md.
-          DB="vxturestudio_modelruntime_main"
-          CONT="${PRODUCT_CODE}-db"
+          # Atlas owns a fully separate physical database, not a schema in the
+          # shared platform DB - see docs/30-design/00-index.md. Both names
+          # derive from PRODUCT_CODE, matching docker-compose.yml exactly; if
+          # these two derivations ever disagree, db-init silently targets a
+          # database nobody is running against.
+          DB="vx_${PRODUCT_CODE}_postgres_db"
+          CONT="vx-${PRODUCT_CODE}-postgres-db-${DEPLOY_ENV}"
           ENV_FILE="$(cd "$REPO_DIR/.." && pwd)/etc/.env"
           run() { docker exec -i "$CONT" psql -U postgres -d "$DB" -v ON_ERROR_STOP=1 "$@"; }
 
@@ -179,7 +185,7 @@ jobs:
             fi
             sed -i -E "s#(^DATABASE_URL=\"?postgresql://atlas_svc:)[^@]*@#\1${svc_pw}@#" "$ENV_FILE"
             echo "[db-init] no svc password in .env; generated one and patched DATABASE_URL"
-            docker restart "${PRODUCT_CODE}-app" >/dev/null 2>&1 || true
+            docker restart "vx-${PRODUCT_CODE}-app-${DEPLOY_ENV}" >/dev/null 2>&1 || true
           fi
           # Pipe the ALTER over stdin (never argv) so the password stays out of ps.
           esc="$(printf '%s' "$svc_pw" | sed "s/'/''/g")"
@@ -207,5 +213,5 @@ jobs:
           rm -rf "$DDL_STAGE"
           REMOTE_SCRIPT
           scp -i ~/.ssh/deploy_key -P "$port" -o ConnectTimeout=30 /tmp/db-init.sh "$DEPLOY_USER@$DEPLOY_HOST:/tmp/db-init.sh"
-          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") DDL_STAGE=$(printf %q "$ddl_stage") PINNED_SHA=$(printf %q "$PINNED_SHA") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") bash /tmp/db-init.sh" \
+          printf '%s\n' "REPO_DIR=$(printf %q "$deploy_dir") DDL_STAGE=$(printf %q "$ddl_stage") PINNED_SHA=$(printf %q "$PINNED_SHA") ACTION=$(printf %q "$ACTION") PRODUCT_CODE=$(printf %q "$PRODUCT_CODE") DEPLOY_ENV=$(printf %q "$DEPLOY_ENV") bash /tmp/db-init.sh" \
             | ssh "${ssh_opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" bash -s
