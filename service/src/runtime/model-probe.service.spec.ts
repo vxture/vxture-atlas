@@ -302,4 +302,37 @@ describe("ModelProbeService", () => {
       expect.objectContaining({ maxTokens: 16, temperature: 0 }),
     );
   });
+
+  describe("cancellation", () => {
+    it("hands the adapter a signal, so the timeout can cancel the fetch", async () => {
+      await ctx.service.probe("model-1");
+
+      const [request] = ctx.provider.chat.mock.calls[0] as [
+        { signal?: AbortSignal },
+      ];
+      expect(request.signal).toBeInstanceOf(AbortSignal);
+      expect(request.signal?.aborted).toBe(false);
+    });
+
+    it("aborts that signal when the probe times out", async () => {
+      vi.useFakeTimers();
+      let captured: AbortSignal | undefined;
+      // An upstream that accepts the request and then never answers - the case
+      // the timeout exists for. Without the signal the fetch would stay in
+      // flight after the probe gave up.
+      ctx.provider.chat = vi.fn((request: { signal?: AbortSignal }) => {
+        captured = request.signal;
+        return new Promise<never>(() => {});
+      });
+
+      const probe = ctx.service.probe("model-1");
+      await vi.advanceTimersByTimeAsync(20_000);
+      const result = await probe;
+
+      expect(captured?.aborted).toBe(true);
+      expect(result.checks[0]?.ok).toBe(false);
+      expect(result.checks[0]?.error?.message).toContain("timed out");
+      vi.useRealTimers();
+    });
+  });
 });
