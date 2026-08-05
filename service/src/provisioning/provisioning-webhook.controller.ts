@@ -3,6 +3,7 @@ import {
   Controller,
   Headers,
   HttpCode,
+  Inject,
   Post,
   Req,
   UnauthorizedException,
@@ -18,7 +19,14 @@ interface RawBodyRequest extends Request {
 
 @Controller("provisioning/webhook")
 export class ProvisioningWebhookController {
-  constructor(private readonly webhook: ProvisioningWebhookService) {}
+  // Explicit @Inject: the deployed artifact is an esbuild bundle, which does
+  // not emit `design:paramtypes`, so constructor injection by type alone
+  // resolves to undefined at runtime even though tsconfig sets
+  // emitDecoratorMetadata and the unit tests (swc) pass.
+  constructor(
+    @Inject(ProvisioningWebhookService)
+    private readonly webhook: ProvisioningWebhookService,
+  ) {}
 
   @Post()
   @HttpCode(200)
