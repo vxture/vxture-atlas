@@ -93,6 +93,10 @@ GRANT UPDATE (provider_id, endpoint_url, protocol, config,
 -- deploy/database/ddl/incr/01_model_grants_task_profile.sql, right after its
 -- ALTER TABLE ADD COLUMN, which is safe for both a fresh install (runs after
 -- CREATE TABLE) and an existing one (runs after the ALTER TABLE).
+-- ORDER MATTERS BOTH WAYS: the REVOKE below strips that increment's grant, so
+-- re-running this file ALONE silently removes task_profile from the writable
+-- set. db-init.yml applies 98 before incr/, which is what keeps it correct -
+-- do not "just re-apply the column locks" by hand.
 REVOKE UPDATE ON model.model_grants FROM atlas_svc;
 GRANT UPDATE (priority, is_active, reason, expires_at, updated_by, updated_at, deleted_at)
   ON model.model_grants TO atlas_svc;
