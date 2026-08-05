@@ -77,6 +77,7 @@ export class ClaudeProvider extends BaseProvider {
       resolveClaudeMessagesEndpoint(request.endpointUrl),
       buildClaudeHeaders(request),
       buildClaudeBody(request, false),
+      request.signal,
     );
 
     const content = (response.content ?? [])
@@ -130,6 +131,7 @@ export class ClaudeProvider extends BaseProvider {
       url: resolveClaudeMessagesEndpoint(request.endpointUrl),
       headers: buildClaudeHeaders(request),
       body: buildClaudeBody(request, true),
+      ...(request.signal !== undefined ? { signal: request.signal } : {}),
     });
 
     yield* parseClaudeStream(body);

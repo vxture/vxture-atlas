@@ -187,7 +187,9 @@ export class ModelProbeService {
   ): Promise<ModelProbeCheck> {
     const startedAt = Date.now();
     try {
-      const response = await withTimeout(provider.chat(request));
+      const response = await withTimeout((signal) =>
+        provider.chat({ ...request, signal }),
+      );
       const total = response.totalTokens ?? 0;
       return {
         mode: "chat",
@@ -212,7 +214,9 @@ export class ModelProbeService {
   ): Promise<ModelProbeCheck> {
     const startedAt = Date.now();
     try {
-      const usage = await withTimeout(collectStreamUsage(provider, request));
+      const usage = await withTimeout((signal) =>
+        collectStreamUsage(provider, { ...request, signal }),
+      );
       const total = usage?.totalTokens ?? 0;
       return {
         mode: "stream",
@@ -326,19 +330,27 @@ async function collectStreamUsage(
 }
 
 /**
- * 上游挂住时给自检一个上界。注意它不会取消底层 fetch —— provider 适配器目前
- * 没有 AbortSignal 通路，这里只保证管理面不会被一个卡死的上游拖住。
+ * 上游挂住时给自检一个上界，并**真正取消**底层 fetch —— 适配器现在有
+ * AbortSignal 通路（providers/upstream-timeout.ts），signal 会与适配器内部的
+ * 首字节超时取并集。
+ *
+ * race 仍然保留：signal 只对走 fetch 的路径有效，任何不理会它的代码路径仍需
+ * 一个兜底的上界，否则管理面会被一个永不落地的 promise 挂住。
  */
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const expired = new Error(`probe timed out after ${PROBE_TIMEOUT_MS}ms`);
+  const timer = setTimeout(() => controller.abort(expired), PROBE_TIMEOUT_MS);
+  timer.unref();
+
   return Promise.race([
-    work,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`probe timed out after ${PROBE_TIMEOUT_MS}ms`)),
-        PROBE_TIMEOUT_MS,
-      ).unref(),
-    ),
-  ]);
+    run(controller.signal),
+    new Promise<never>((_, reject) => {
+      controller.signal.addEventListener("abort", () => reject(expired), {
+        once: true,
+      });
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 function failedCheck(
