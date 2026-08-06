@@ -95,7 +95,13 @@ jobs:
   deploy:
     name: deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Measured job execution, four most recent successful deploys: 1m29s-2m04s.
+    # The production Environment approval wait does NOT count toward this - the
+    # timer starts when the job begins executing - so tightening it does not put
+    # the section 6 approval gate at risk. 15m is ~7x the worst observed, which
+    # covers tailnet join plus scp/ssh variance and still surfaces a hang fast
+    # (vxture-platform#191).
+    timeout-minutes: 15
     needs: [detect, call-build]
     permissions:
       contents: read

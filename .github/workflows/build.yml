@@ -41,7 +41,12 @@ jobs:
   docker-build:
     name: docker-build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Sized against measured job execution, not a round number: the four most
+    # recent successful runs took 1m44s-3m07s. An oversized timeout is not free
+    # headroom - it is how long a hung job burns before anyone hears about it
+    # (vxture-platform#191). 15m leaves ~5x for a cold `type=gha` cache miss,
+    # which is the only plausible slow path here.
+    timeout-minutes: 15
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
     env:
@@ -219,11 +224,38 @@ jobs:
           REF_TAG: ${{ steps.meta.outputs.ref_tag }}
         run: |
           set -euo pipefail
+          # Retry with backoff. A registry can answer 403 Forbidden as a
+          # THROTTLE rather than a permission failure - the giveaway is that
+          # identical credentials succeed for some tags and fail for others in
+          # the same run (vxture-platform#191, observed on umbra v0.1.1).
+          #
+          # Retrying is safe: `imagetools create` only repoints a tag at a
+          # manifest that already exists, so a partially completed attempt has
+          # nothing to roll back and re-running is a no-op.
+          #
+          # Note this loop copies WITHIN one registry (ghcr->ghcr, acr->acr),
+          # which is the form umbra saw succeed; its failures were all on the
+          # cross-registry leg, which atlas does not have (the build step pushes
+          # to both registries directly). So this is defence in depth against a
+          # transient, not a fix for an observed atlas failure.
+          retag() {
+            local repo="$1" delay
+            for delay in 15 30 45 0; do
+              if docker buildx imagetools create \
+                   -t "${repo}:${IMAGE_TAG}" \
+                   -t "${repo}:${REF_TAG}" \
+                   "${repo}:${IMAGE_TAG}"; then
+                return 0
+              fi
+              [ "$delay" -eq 0 ] && break
+              echo "retag ${repo} failed; retrying in ${delay}s"
+              sleep "$delay"
+            done
+            echo "::error::retag failed for ${repo} after 4 attempts"
+            return 1
+          }
           for repo in \
             "ghcr.io/${GHCR_NAMESPACE}/${IMAGE}" \
             "${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE}"; do
-            docker buildx imagetools create \
-              -t "${repo}:${IMAGE_TAG}" \
-              -t "${repo}:${REF_TAG}" \
-              "${repo}:${IMAGE_TAG}"
+            retag "$repo"
           done
