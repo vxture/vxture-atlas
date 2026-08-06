@@ -53,10 +53,6 @@ export function normalizeProtocol(
   return ALIASES[normalized];
 }
 
-export function isModelProtocol(value: string): value is ModelProtocol {
-  return (MODEL_PROTOCOLS as readonly string[]).includes(value);
-}
-
 /** 某个规范值可接受的所有别名（供管理面展示，说明为什么旧值仍能录入）。 */
 export function aliasesFor(protocol: ModelProtocol): string[] {
   return Object.entries(ALIASES)
