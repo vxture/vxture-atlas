@@ -254,26 +254,46 @@ Public lines are unlimited and would cost nothing. `vxture-platform` fails with
 the byte-identical 403 for the same reason: one org, one quota. It also fits the
 timing, the newest analysis anywhere in the org being 2026-07-24.
 
-**Second, independent defect**: `sonar-project.properties` declared
-`sonar.projectKey=atlas`, which resolves to nothing. Sonar project keys are
-immutable - a project is keyed at import from that day's GitHub repo name, and
-renaming the repo updates only the display name. This repo's project is keyed
-`vxture_Model-Cortex` and displays as `vxture-atlas`. `atlas`, `vxture-atlas`,
-`vxture_atlas` and `vxture_vxture-atlas` were each tried against the live
-console; all 404. The org is uniformly like this - `vxture-karda` is keyed
-`vxture_Knowledge-Vault`, `vxture-runa` is `vxture_Ability-Runa`,
-`vxture-platform` is `vxture_vxture`.
+**Second, independent defect - now fixed**: `sonar-project.properties` declared
+`sonar.projectKey=atlas`, which matched no project at all.
 
-So even with the quota restored, the scan would still have failed, and the Free
-plan does not let a scanner provision the missing project.
+A Sonar key is frozen at import and a GitHub repo rename updates only the Sonar
+*display name*, so every project in the org had drifted from its repo: this one
+was `vxture_Model-Cortex` (the pre-Atlas codename), karda `vxture_Knowledge-Vault`,
+runa `vxture_Ability-Runa`, ruyin `vxture_agentstudio-ruyin`, platform
+`vxture_vxture`. Display names had followed the renames, so the drift was
+invisible from the project list - which is how an earlier reading of this entry
+came to call `vxture_Model-Cortex` a deprecated leftover and propose deleting
+it. It was this repo's own project; deleting it would have destroyed the
+binding and the history.
+
+**Resolved 2026-08-06 by realigning Sonar, not by working around it.** Keys are
+editable (Project > Administration > Update key, contrary to the "immutable"
+claim this entry previously made). All nine projects in the org were renamed to
+`vxture_<repo-name>` - `{github org}_{repo}`, SonarCloud's own import
+convention, with the org prefix preserving global uniqueness - and each was
+verified by reading the project link back off the console:
+
+| repo | key |
+|---|---|
+| vxture-atlas | `vxture_vxture-atlas` |
+| vxture-platform | `vxture_vxture-platform` |
+| vxture-karda | `vxture_vxture-karda` |
+| vxture-runa | `vxture_vxture-runa` |
+| vxture-ruyin | `vxture_vxture-ruyin` |
+| vxture-umbra | `vxture_vxture-umbra` |
+| vx-agent-xuanzhen | `vxture_vx-agent-xuanzhen` |
+| vx-agent-ruralstrat | `vxture_vx-agent-ruralstrat` (already correct) |
+| demo-repository | `vxture_demo-repository` (already correct) |
 
 **Fixed here**: `continue-on-error` removed, so the job reports its real status;
-`sonar.projectKey` corrected to `vxture_Model-Cortex`.
+`sonar.projectKey` set to `vxture_vxture-atlas`.
 
-**Do NOT delete `vxture_Model-Cortex`.** An earlier reading of this entry called
-it a deprecated leftover from the pre-Atlas codename and proposed deleting it.
-That was wrong - it is this repo's own Sonar project, and deleting it destroys
-the binding and the history.
+**Breaks vxture-platform until it follows.** Its `sonar-project.properties`
+still declares `vxture_vxture`, which no longer exists. Out of this repo's write
+scope; filed on `vxture/vxture-platform#189`. Its scan is blocked on the quota
+anyway, so nothing runs in the meantime - but the change must land before the
+quota is restored, or the first scan creates a duplicate project.
 
 **Recovery** - owner actions on sonarcloud.io, outside this repo's write scope:
 
