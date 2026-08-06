@@ -25,6 +25,7 @@ any entry, read the commit that closed it.
 | [TD-019](#td-019) | `atlas.parse` cannot be advertised honestly | 2026-07-28 |
 | [TD-023](#td-023) | Nothing stops the esbuild decorator-metadata trap recurring | 2026-08-05 |
 | [TD-024](#td-024) | `reqlog.request_records.usage_type` is never written | 2026-08-06 |
+| [TD-026](#td-026) | Third-party actions on mutable tags in the credential path | 2026-08-06 |
 
 ## Closed
 
@@ -183,17 +184,41 @@ esbuild decorator-metadata plugin, or a lint rule requiring `@Inject`.
 ## TD-024
 
 **Missing**: `reqlog.request_records.usage_type` is declared (`normal` / `retry`
-/ `test`) and every row written so far leaves it NULL. No writer sets it.
+/ `test`) and the chat path still writes NULL.
 
-**Why it matters before it hurts**: design 100's `probe` self-check - the
-thing that makes model onboarding a page operation rather than a
-configure-and-pray - is specified to write its calls with `usage_type='test'`
-and the all-zero sentinel tenant, precisely so operational traffic stays out
-of tenant usage views. Ship `probe` (P2) against a writer that cannot express
-`test` and every probe silently lands in a tenant's `/tenancy/usage`.
+**Half-closed by P2** (2026-08-06): `RequestLogService` now takes `usage_type`
+from its caller, and the probe passes `test` against the all-zero sentinel - so
+operator self-checks stay out of tenant usage views, which was the urgent half.
+The chat and retry paths still pass nothing.
 
-**Recovery**: `RequestLogService` takes `usage_type` from its caller, chat
-passes `normal`, retries pass `retry`, and P2's probe passes `test`.
-`/tenancy/usage` then filters to `normal`/`retry`. Must land before or with
-P2, not after.
+**Recovery**: chat passes `normal`, retries pass `retry`, then
+`/tenancy/usage` can filter to `normal`/`retry`. Until then the filter cannot
+be turned on, because NULL would exclude all real traffic.
 
+
+## TD-026
+
+**Wrong**: atlas pins `tailscale/github-action` and `aquasecurity/trivy-action`
+to full commit SHAs, but `docker/login-action`, `docker/build-push-action`,
+`docker/setup-buildx-action` and `SonarSource/sonarqube-scan-action` sit on
+floating major tags. A tag is a mutable reference: repointing one yields
+whatever secrets that workflow holds - for `docker/login-action`, the ACR
+password.
+
+**Not atlas's decision to make**: the governance standard pins *binaries*
+(gitleaks, osv-scanner) and is silent on action refs, and `CLAUDE.md` forbids
+inventing a standard in a product repo. Raised as
+`vxture/vxture-platform#188`, which also carries the larger finding - the
+standard names third-party action supply-chain risk for osv-scanner and then
+hands production SSH keys and passphrases to `appleboy/*` on floating tags
+across five platform workflows.
+
+**Atlas is the reference for the fix, not a victim of it**: it already has no
+`appleboy/*` at all - `.github/actions/tailnet-ssh-connect` plus native
+`ssh`/`scp` - which is the standard's own stated remedy applied to the
+credential path.
+
+**Recovery**: blocked on platform#188 settling the rule. Then convert the four
+`docker/*` and Sonar references to SHAs. Do not fix this locally first - a
+product repo diverging upward is what created the three-posture mess this
+entry describes.
