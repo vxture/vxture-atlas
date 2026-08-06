@@ -154,12 +154,84 @@ jobs:
             case "$creds" in *:*) svc_pw="${creds#*:}" ;; esac
           fi
 
+          SCHEMAS="'model','key','reqlog','routing','provisioning'"
+
+          # Column-level UPDATE whitelist, as the pinned DDL declares it.
+          # Flattens the SQL (the GRANT column lists wrap over several lines),
+          # splits on ';', and emits one schema.table.column per line.
+          # incr/ is parsed too - a grant may live there when the column it
+          # covers is added by an increment (incr/01, see 98_column_locks.sql).
+          declared_grants() {
+            cat database/ddl/98_column_locks.sql database/ddl/incr/*.sql 2>/dev/null \
+              | sed 's/--.*//' \
+              | tr '\n' ' ' \
+              | tr ';' '\n' \
+              | grep -oiE "GRANT[[:space:]]+UPDATE[[:space:]]*\([^)]*\)[[:space:]]*ON[[:space:]]+[a-z_]+\.[a-z_]+[[:space:]]+TO[[:space:]]+atlas_svc" \
+              | while read -r stmt; do
+                  tbl="$(printf '%s' "$stmt" | sed -E 's/.*[Oo][Nn][[:space:]]+([a-z_]+\.[a-z_]+)[[:space:]]+[Tt][Oo].*/\1/')"
+                  # A pipeline, not `while read`: the column list has no
+                  # trailing newline, so a read loop silently drops the last
+                  # column of every GRANT.
+                  printf '%s\n' "$stmt" \
+                    | sed -E 's/^[^(]*\(([^)]*)\).*/\1/' \
+                    | tr -d ' ' | tr ',' '\n' \
+                    | sed "/^\$/d; s|^|$tbl.|"
+                done \
+              | sort -u
+          }
+
+          # What the database actually grants. REVOKE strips the table-level
+          # UPDATE first, so anything here is a column grant.
+          actual_grants() {
+            run -tAc "SELECT table_schema||'.'||table_name||'.'||column_name
+                        FROM information_schema.column_privileges
+                       WHERE grantee = 'atlas_svc'
+                         AND privilege_type = 'UPDATE'
+                         AND table_schema IN ($SCHEMAS)
+                       ORDER BY 1;" | sed '/^$/d' | sort -u
+          }
+
+          # The column locks ARE the write-governance mechanism (governance
+          # section 7), and until now nothing checked that the database agreed
+          # with the DDL after an apply - TD-025 was exactly a column the
+          # whitelist never granted, and it stayed invisible for months.
+          #
+          # Compared both ways on purpose. Missing means the DDL did not take
+          # effect; extra means someone widened the service role's write
+          # surface outside this file, which no other check would ever notice.
+          check_column_locks() {
+            declared_grants > /tmp/db-init-declared.txt
+            actual_grants   > /tmp/db-init-actual.txt
+            d_n="$(wc -l < /tmp/db-init-declared.txt | tr -d ' ')"
+            a_n="$(wc -l < /tmp/db-init-actual.txt | tr -d ' ')"
+            echo "[db-init] column locks: DDL declares $d_n column grants, database has $a_n"
+
+            missing="$(comm -23 /tmp/db-init-declared.txt /tmp/db-init-actual.txt)"
+            extra="$(comm -13 /tmp/db-init-declared.txt /tmp/db-init-actual.txt)"
+            rm -f /tmp/db-init-declared.txt /tmp/db-init-actual.txt
+
+            if [ -z "$missing" ] && [ -z "$extra" ]; then
+              echo "[db-init] column locks match the pinned DDL"
+              return 0
+            fi
+            if [ -n "$missing" ]; then
+              echo "[db-init] ERROR: declared but NOT granted (DDL did not take effect):" >&2
+              echo "$missing" | sed 's/^/  /' >&2
+            fi
+            if [ -n "$extra" ]; then
+              echo "[db-init] ERROR: granted but NOT declared (write surface widened outside the DDL):" >&2
+              echo "$extra" | sed 's/^/  /' >&2
+            fi
+            return 1
+          }
+
           if [ "$ACTION" = "verify" ]; then
             echo "[db-init] atlas schema tables:"
-            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ('model','key','reqlog','routing') ORDER BY 1;"
+            run -c "SELECT table_schema||'.'||table_name FROM information_schema.tables WHERE table_schema IN ($SCHEMAS) ORDER BY 1;"
             echo "[db-init] service role state:"
             run -c "SELECT rolname, rolcanlogin, (rolpassword IS NOT NULL) AS has_password FROM pg_roles WHERE rolname = 'atlas_svc';"
             if [ -n "$svc_pw" ]; then echo "[db-init] .env DATABASE_URL carries a svc password: yes"; else echo "[db-init] .env DATABASE_URL carries a svc password: no"; fi
+            check_column_locks
             exit 0
           fi
 
@@ -208,6 +280,10 @@ jobs:
             run -tAc "SELECT x FROM unnest(ARRAY[$in_list]) AS x WHERE x NOT IN (SELECT table_schema||'.'||table_name FROM information_schema.tables);" >&2
             exit 1
           fi
+
+          # Same assertion for the write governance: tables existing says
+          # nothing about whether the column locks landed.
+          check_column_locks
 
           echo "[db-init] done."
           rm -rf "$DDL_STAGE"
