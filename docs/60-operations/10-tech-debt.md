@@ -26,6 +26,7 @@ any entry, read the commit that closed it.
 | [TD-023](#td-023) | Nothing stops the esbuild decorator-metadata trap recurring | 2026-08-05 |
 | [TD-024](#td-024) | `reqlog.request_records.usage_type` is never written | 2026-08-06 |
 | [TD-026](#td-026) | Third-party actions on mutable tags in the credential path | 2026-08-06 |
+| [TD-027](#td-027) | Atlas has never been scanned by Sonar; the failure reported as success | 2026-08-06 |
 
 ## Closed
 
@@ -222,3 +223,45 @@ credential path.
 `docker/*` and Sonar references to SHAs. Do not fix this locally first - a
 product repo diverging upward is what created the three-posture mess this
 entry describes.
+
+## TD-027
+
+**Wrong**: Atlas has never been analysed by Sonar. Every run of `sonar.yml`
+since the repo split has failed at the first network call -
+
+```
+ERROR Failed to query JRE metadata: GET https://api.sonarcloud.io/analysis/jres
+      failed with HTTP 403 Forbidden. Please check ... SONAR_TOKEN.
+INFO  EXECUTION FAILURE
+```
+
+- and reported **success**, because the step carried `continue-on-error: true`.
+The scanner never started, so there is no partial analysis either.
+
+**Not an atlas problem**: `SONAR_TOKEN` is an org secret (visibility ALL,
+created 2026-07-14) and `vxture-platform`'s own Sonar job fails with the byte-
+identical 403. The token is rejected outright, org-wide. The stopgap comment in
+`sonar.yml` blamed a missing `atlas` project binding; that diagnosis was wrong,
+and the flag is what kept it from being caught.
+
+**Second, separate defect**: the SonarCloud GitHub App still runs *automatic*
+analysis for this repo under `vxture_Model-Cortex` - the pre-Atlas codename,
+deprecated 2026-07-24. It reports on every PR (cancelled/failed) and is the only
+Sonar analysis attached to this repo. `sonar.yml` was written to supersede it;
+the supersession never happened because the replacement never ran.
+
+**Fixed here**: `continue-on-error` removed. The job is now honestly red. It is
+not one of the five required checks, so it blocks nothing - it is red so the gap
+is visible rather than disguised, which is the failure this entry is about.
+
+**Recovery** - all three steps are owner actions on sonarcloud.io, outside this
+repo's write scope, and none can be done from CI:
+
+1. Issue a valid token for org `vx-6b309295f6500aba6b2a71a29ee27de77fa41583`
+   and replace the org secret `SONAR_TOKEN`.
+2. Turn off Automatic Analysis for `vxture-atlas`, so the app stops reporting
+   under the stale key and competing with the explicit scan.
+3. Delete or archive the `vxture_Model-Cortex` project.
+
+Reported to the platform line as `vxture/vxture-platform#189` (the token is
+org-level, so the fix is one action for every repo).
