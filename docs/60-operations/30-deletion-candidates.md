@@ -3,9 +3,13 @@
 Numbered because the docs guardrail requires it (`--strict` rejects unnumbered
 files in this repo). It is still a temporary working file. It is a
 list of candidates. Each entry needs a verdict (delete / keep / fix-instead)
-before anything moves; entries carrying a `[DELETED]` marker have had theirs.
+before anything moves; a `[DELETED]` / `[FIXED]` marker means it has had one.
 
 Opened 2026-08-06. Delete this file once every entry has a verdict.
+
+**Only A3 is still open.** A1, A2, B1, B2 are resolved; section C was never a
+candidate. A3 needs installing ESLint rather than deleting a lint config, which
+is a change in its own right, not a cleanup.
 
 ## Method, and what it cannot see
 
@@ -88,7 +92,7 @@ a lint.
 
 ## B. Unwired - needs a verdict, not obviously dead
 
-### B1. `scripts/pricing/*`
+### B1. `scripts/pricing/*`  [DELETED 2026-08-06]
 
 `build-reference-prices.mjs`, `reference-prices.json`, `local-prices.json`,
 `README.md`. Reference analysis shows a **closed island**: these four files
@@ -100,10 +104,36 @@ That is consistent with two very different situations: a genuinely abandoned
 one-off, or a manual operator tool for authoring `model_price_rules` that is
 *supposed* to be run by hand. The reference graph cannot tell them apart.
 
-**Needs**: an owner decision. If it is an operator tool, it belongs in the
-operations docs with an invocation line, not in an unreferenced corner.
+**Verdict (owner, 2026-08-06)**: no manual-ops path was ever designed - price
+rules are maintained through the operator platform, and `/capability/price-rules`
+already serves that end to end. Nothing referenced these files from any
+interface. Deleted.
 
-### B2. `MODEL_PLATFORM_PORT` - `service/src/main.ts:21`
+**But the deletion could not be clean.** The island's README was the *only*
+place several load-bearing facts were written down, none of which appeared in
+any interface document:
+
+- `unit_tokens` is a quote basis (per million), not a cap
+- **currency is USD by convention**, while the DDL column defaults to `CNY` -
+  a reader of the schema or the API would infer the opposite
+- vendor tables quote USD per single token; converting is `x 1e6`
+- cache-read price and per-model input/output caps have **no column**
+- upstream price coverage is uneven: doubao 0/12, private 0/29, zhipu none
+
+So the files went only after the knowledge moved:
+`docs/20-specs/10-http-surface.md` gained a price-rule unit-semantics section
+(it is interface contract - whoever authors a rule reads it there), and
+`docs/30-design/100-model-onboarding-and-protocol-adapters.md` section 9 gained
+the coverage table (it is an onboarding step - "this provider's price must be
+read off the vendor console").
+
+The README also cited ADR-004 as the authority for "the table is the billing
+authority". ADR-004 rejects the Portkey Gateway dependency and says nothing of
+the sort; the misreference left with the file. The two remaining ADR-004
+citations (`scripts/dev/s2s-smoke.mjs`, `service/src/providers/sse.ts`) were
+checked and are correct.
+
+### B2. `MODEL_PLATFORM_PORT` - `service/src/main.ts:21`  [FIXED 2026-08-06]
 
 ```ts
 const port = Number(process.env.MODEL_PLATFORM_PORT ?? 3100);
@@ -113,9 +143,20 @@ Carries the pre-rename `model-platform` name (retired by TD-013) and is set
 **nowhere** - not in `docker-compose.yml`, not in `.env.example`, not in any
 workflow. Production therefore runs on the hardcoded `3100` default.
 
-Not dead code (the fallback is load-bearing), but a stale-named knob that
-nothing turns. Either rename to match the `atlas` cascade and set it in compose,
-or drop the variable and keep the constant.
+**It was worse than a stale name - both halves were disconnected.**
+`docker-compose.yml:50` sets `PORT: "3100"`, which the code never read; the code
+read `MODEL_PLATFORM_PORT`, which nothing set. They agreed only because both
+hardcode 3100.
+
+That is a latent deploy failure, not a cosmetic issue. Changing compose's `PORT`
+to move the service would leave the app listening on 3100 while the publish
+mapping pointed at the new port - and the container healthcheck probes
+`127.0.0.1:3100/healthz` from *inside* the container, so it would stay green
+while the service was unreachable from outside.
+
+**Done**: `main.ts` reads `PORT`, the variable compose already sets.
+`MODEL_PLATFORM_PORT` is gone. Renaming it to `ATLAS_PORT` would only have moved
+the disconnect.
 
 Note: `MODEL_PLATFORM_SECRET_KEY` and `MODEL_PLATFORM_TEST_KEY` also appear with
 the old name, but only as **spec fixture strings** - they are test data, not

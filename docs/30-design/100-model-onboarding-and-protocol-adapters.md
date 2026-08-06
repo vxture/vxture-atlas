@@ -172,3 +172,38 @@ writes `reqlog.request_records` with `usage_type='test'` and the all-zero
 `COMMERCE_SENTINEL_UUID` for `tenant_id`/`workspace_id`, and is excluded from
 quota deduction and from C3 consume. It is Atlas's own operational act, so it
 must not appear in any tenant's usage view.
+
+## 9. Pricing is a manual onboarding step for half of Atlas's providers
+
+Registering a model does not price it. A `model_price_rules` row is authored
+separately through `/capability/price-rules`, and the field semantics that
+govern it (unit basis, the USD-vs-CNY-default trap, the three vendor fields
+Atlas has no column for) are in `docs/20-specs/10-http-surface.md`.
+
+What onboarding needs to know is **where the number comes from**, because it
+differs by provider. Public aggregate price tables cover the western vendors
+well and the Chinese ones badly. Measured against LiteLLM's table, 2026-08-01:
+
+| Atlas provider | Priced upstream |
+|---|---|
+| claude | 24/24 |
+| moonshot | 22/22 |
+| deepseek | 12/12 |
+| xai | 40/40 |
+| mistral | 54/58 |
+| openai | 145/219 |
+| qwen | 18/36 |
+| **doubao** | **0/12** - rows exist, all prices absent |
+| **private** | **0/29** - self-hosted, unpriced by definition |
+| **zhipu** | **none** - no first-party rows at all |
+
+So for **Doubao and Zhipu - two of the four providers Atlas runs today -
+onboarding must read the price off the vendor's own console.** There is no
+aggregate to copy from, and a partially-populated aggregate is the dangerous
+case: it looks like coverage.
+
+A zero price is never an acceptable placeholder. A rule charging nothing is
+indistinguishable from a rule that works, and nothing on the request path
+computes money (§1), so the error surfaces only when someone tries to bill.
+Leave the model unpriced instead - an absent rule is a question, a zero rule is
+a wrong answer.
