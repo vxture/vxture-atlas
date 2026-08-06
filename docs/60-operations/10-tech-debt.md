@@ -26,7 +26,7 @@ any entry, read the commit that closed it.
 | [TD-023](#td-023) | Nothing stops the esbuild decorator-metadata trap recurring | 2026-08-05 |
 | [TD-024](#td-024) | `reqlog.request_records.usage_type` is never written | 2026-08-06 |
 | [TD-026](#td-026) | Third-party actions on mutable tags in the credential path | 2026-08-06 |
-| [TD-027](#td-027) | Atlas has never been scanned by Sonar; the failure reported as success | 2026-08-06 |
+| [TD-027](#td-027) | Sonar has never scanned Atlas: org private-LOC quota full, wrong project key | 2026-08-06 |
 
 ## Closed
 
@@ -238,30 +238,70 @@ INFO  EXECUTION FAILURE
 - and reported **success**, because the step carried `continue-on-error: true`.
 The scanner never started, so there is no partial analysis either.
 
-**Not an atlas problem**: `SONAR_TOKEN` is an org secret (visibility ALL,
-created 2026-07-14) and `vxture-platform`'s own Sonar job fails with the byte-
-identical 403. The token is rejected outright, org-wide. The stopgap comment in
-`sonar.yml` blamed a missing `atlas` project binding; that diagnosis was wrong,
-and the flag is what kept it from being caught.
+**The root cause is a quota, not a credential.** The error text names
+`SONAR_TOKEN` and that reading is wrong. Read off the SonarCloud console
+2026-08-06:
 
-**Second, separate defect**: the SonarCloud GitHub App still runs *automatic*
-analysis for this repo under `vxture_Model-Cortex` - the pre-Atlas codename,
-deprecated 2026-07-24. It reports on every PR (cancelled/failed) and is the only
-Sonar analysis attached to this repo. `sonar.yml` was written to supersede it;
-the supersession never happened because the replacement never ran.
+```
+Free plan   up to 50k PRIVATE lines of code / UNLIMITED public lines of code
+Used        49.851k private lines of code across 5 projects        (99.7%)
+```
 
-**Fixed here**: `continue-on-error` removed. The job is now honestly red. It is
-not one of the five required checks, so it blocks nothing - it is red so the gap
-is visible rather than disguised, which is the failure this entry is about.
+149 lines of headroom against an ~11k-LOC service. Analysis is refused because
+the organization's private-LOC allowance is full - and it is full because every
+project is classified **Private in Sonar while its GitHub repo is PUBLIC**.
+Public lines are unlimited and would cost nothing. `vxture-platform` fails with
+the byte-identical 403 for the same reason: one org, one quota. It also fits the
+timing, the newest analysis anywhere in the org being 2026-07-24.
 
-**Recovery** - all three steps are owner actions on sonarcloud.io, outside this
-repo's write scope, and none can be done from CI:
+**Second, independent defect - now fixed**: `sonar-project.properties` declared
+`sonar.projectKey=atlas`, which matched no project at all.
 
-1. Issue a valid token for org `vx-6b309295f6500aba6b2a71a29ee27de77fa41583`
-   and replace the org secret `SONAR_TOKEN`.
-2. Turn off Automatic Analysis for `vxture-atlas`, so the app stops reporting
-   under the stale key and competing with the explicit scan.
-3. Delete or archive the `vxture_Model-Cortex` project.
+A Sonar key is frozen at import and a GitHub repo rename updates only the Sonar
+*display name*, so every project in the org had drifted from its repo: this one
+was `vxture_Model-Cortex` (the pre-Atlas codename), karda `vxture_Knowledge-Vault`,
+runa `vxture_Ability-Runa`, ruyin `vxture_agentstudio-ruyin`, platform
+`vxture_vxture`. Display names had followed the renames, so the drift was
+invisible from the project list - which is how an earlier reading of this entry
+came to call `vxture_Model-Cortex` a deprecated leftover and propose deleting
+it. It was this repo's own project; deleting it would have destroyed the
+binding and the history.
 
-Reported to the platform line as `vxture/vxture-platform#189` (the token is
-org-level, so the fix is one action for every repo).
+**Resolved 2026-08-06 by realigning Sonar, not by working around it.** Keys are
+editable (Project > Administration > Update key, contrary to the "immutable"
+claim this entry previously made). All nine projects in the org were renamed to
+`vxture_<repo-name>` - `{github org}_{repo}`, SonarCloud's own import
+convention, with the org prefix preserving global uniqueness - and each was
+verified by reading the project link back off the console:
+
+| repo | key |
+|---|---|
+| vxture-atlas | `vxture_vxture-atlas` |
+| vxture-platform | `vxture_vxture-platform` |
+| vxture-karda | `vxture_vxture-karda` |
+| vxture-runa | `vxture_vxture-runa` |
+| vxture-ruyin | `vxture_vxture-ruyin` |
+| vxture-umbra | `vxture_vxture-umbra` |
+| vx-agent-xuanzhen | `vxture_vx-agent-xuanzhen` |
+| vx-agent-ruralstrat | `vxture_vx-agent-ruralstrat` (already correct) |
+| demo-repository | `vxture_demo-repository` (already correct) |
+
+**Fixed here**: `continue-on-error` removed, so the job reports its real status;
+`sonar.projectKey` set to `vxture_vxture-atlas`.
+
+**Breaks vxture-platform until it follows.** Its `sonar-project.properties`
+still declares `vxture_vxture`, which no longer exists. Out of this repo's write
+scope; filed on `vxture/vxture-platform#189`. Its scan is blocked on the quota
+anyway, so nothing runs in the meantime - but the change must land before the
+quota is restored, or the first scan creates a duplicate project.
+
+**Recovery** - owner actions on sonarcloud.io, outside this repo's write scope:
+
+1. Set the Sonar projects' visibility to **public**, matching their GitHub
+   repos. This is the fix, not a plan upgrade: public LOC is unlimited on the
+   Free plan, so the quota problem disappears at zero cost.
+2. Re-run `sonar.yml` and confirm `EXECUTION SUCCESS` in the log - not merely a
+   green job, which is exactly the state that held while nothing was scanned.
+
+Reported to the platform line as `vxture/vxture-platform#189` - the quota is
+org-level, so one fix covers every repo.

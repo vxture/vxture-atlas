@@ -1,26 +1,22 @@
 name: sonar
 
 # Non-blocking SonarCloud analysis. NOT one of the five required checks (see
-# docs/50-deployment/rebuild/main-ruleset.json) - this workflow exists to
-# supersede the SonarCloud GitHub App's automatic analysis, which was
-# reporting this repo under a stale project key (vxture_Model-Cortex - the
-# model-platform service's pre-Atlas internal codename, deprecated
-# 2026-07-24). Explicit CI-based analysis under the correct key
-# (sonar-project.properties) takes precedence once SonarCloud sees a scanner
-# run for the repo.
+# docs/50-deployment/rebuild/main-ruleset.json).
 #
 # This job reports its real exit status. It carried `continue-on-error: true`
-# from the repo split until 2026-08-06, on the stated assumption that the only
-# thing missing was the `atlas` project's GitHub binding. That assumption was
-# wrong, and the flag hid the evidence: every run since the split has failed
-# with `403 Forbidden` from api.sonarcloud.io while the job reported success.
-# The org-level SONAR_TOKEN (created 2026-07-14, visibility ALL) is rejected
-# outright - vxture-platform's own Sonar job fails identically, so this is an
-# org credential problem, not an atlas binding problem. See TD-027.
+# from the repo split until 2026-08-06, and the flag hid the fact that every
+# run had failed with `403 Forbidden` from SonarCloud while reporting success -
+# Atlas has never actually been analysed.
 #
-# A red job here blocks nothing (this is not one of the five required checks).
-# It is red so that "Atlas has never been scanned" is visible instead of
-# disguised, which is the entire failure mode the flag produced.
+# The 403 names SONAR_TOKEN, which sent the original diagnosis the wrong way.
+# The real cause is the organization's private-LOC quota: the Free plan allows
+# 50k private lines and 49.851k are consumed, because the Sonar projects are
+# classified Private while their GitHub repos are public (public lines are
+# unlimited). vxture-platform fails identically - one org, one quota. Fixing it
+# is an owner action on sonarcloud.io; see TD-027 and vxture/vxture-platform#189.
+#
+# A red job here blocks nothing. It is red so that "Atlas has never been
+# scanned" is visible instead of disguised, which is what the flag produced.
 
 on:
   pull_request:
