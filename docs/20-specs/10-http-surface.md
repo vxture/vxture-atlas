@@ -46,12 +46,38 @@ The four provider-key mutation routes additionally require
 | GET/POST/PUT/DELETE | `/capability/models[/:id[/activate\|deactivate]]` | Model registry |
 | POST | `/capability/models/:id/probe` | Connectivity self-check. **Makes a real upstream call** (capped at 16 output tokens, non-streaming + streaming). Reports reachability, the resolved adapter/protocol/`wire`, and **whether usage came back** - the signal that the model would otherwise go unmetered. Usage is attributed to the platform sentinel with `usage_type='test'`; no quota is consumed and nothing reaches the metering kernel. Rate-limited to one probe per model per 10s (`429 MODEL_ADMIN_PROBE_COOLDOWN` with `retryAfterMs`); **no step-up** - it is diagnostic, not a credential mutation |
 | GET/POST/PUT/DELETE | `/capability/grants[/:id[/activate]]` | Tenant/application grants, incl. `taskProfile` |
-| GET/POST/PUT/DELETE | `/capability/price-rules[/:id[/activate\|deactivate]]` | Pricing |
+| GET/POST/PUT/DELETE | `/capability/price-rules[/:id[/activate\|deactivate]]` | Pricing - unit semantics below, read them before authoring a rule |
 | GET/POST/PUT | `/capability/policies[/:id[/activate\|deactivate]]` | Policy |
 | GET | `/capability/quotas` | **501** - the platform exposes only a single-workspace C2 read, no bulk endpoint, so this cannot be answered honestly. Use `/tenancy/quotas` per workspace |
 | GET | `/capability/usage-summaries` | Read-only |
 | GET | `/capability/provider-keys` | Read-only, no step-up |
 | POST/PUT | `/capability/provider-keys[/:id/rotate\|activate\|deactivate]` | Envelope-encrypted key vault - step-up required |
+
+### Price-rule unit semantics
+
+A price is three fields that only mean something together, and two of them have
+defaults that read as assertions but are not. Anyone authoring a rule - through
+the operator UI or the API - needs this before typing a number.
+
+| Field | Meaning |
+|---|---|
+| `unit_tokens` | the **basis** the price is quoted per, not a cap or a quota. Default `1000000`, i.e. `input_unit_price` is a price *per million tokens* |
+| `currency` | **USD by convention.** The column's `CNY` default is a Postgres column default, not a statement about the row. A rule that omits it is stored as CNY and will be wrong |
+| `input_unit_price` / `output_unit_price` / `request_unit_price` | `numeric(18,8)`, price per `unit_tokens`. `billing_mode` selects which apply: `token` uses input/output, `request` uses request |
+
+Vendor price tables are near-universally quoted in USD per single token. Converting
+one into a rule is therefore `price x 1e6`, rounded to 8 decimal places, with
+`currency` set explicitly to `USD`.
+
+**No column exists** for cache-read pricing, per-model input caps, or per-model
+output caps. Vendor tables carry these; Atlas cannot express them. Do not fold
+a cache-read discount into `input_unit_price` - that silently mis-prices every
+uncached call.
+
+Atlas **meters, it does not bill** (`docs/30-design/100-model-onboarding-and-protocol-adapters.md`
+§1): nothing on the request path multiplies tokens by these numbers. They exist
+so a downstream biller has an authoritative per-model rate, which is why a wrong
+one is invisible here and visible on an invoice.
 
 ## Tenant self-service plane
 

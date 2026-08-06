@@ -18,7 +18,14 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AtlasModule, { rawBody: true });
   app.enableCors();
 
-  const port = Number(process.env.MODEL_PLATFORM_PORT ?? 3100);
+  // PORT, not MODEL_PLATFORM_PORT: docker-compose.yml has always set `PORT`,
+  // while this line read a name nothing set (a leftover from before TD-013
+  // retired the `model-platform` prefix). Both halves were dead and only agreed
+  // because both hardcoded 3100 - changing compose's PORT would have left the
+  // app listening on 3100 while the publish mapping pointed elsewhere, with the
+  // healthcheck still green because it probes 127.0.0.1:3100 inside the
+  // container.
+  const port = Number(process.env.PORT ?? 3100);
   await app.listen(port);
 }
 
