@@ -87,6 +87,28 @@ jobs:
       - name: Workflow guardrail (workflows parse and keep their triggers)
         run: node scripts/guardrails/check-workflows.mjs --strict
 
+      # Lint needs the workspace installed, unlike the guardrails above, which
+      # run on the runner's bare node. It stays in static-checks rather than
+      # riding along in `build` because a lint failure is a static-check
+      # failure, and quality-gate is the aggregator for those.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable corepack (pnpm from packageManager)
+        run: corepack enable
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+
+      # No `db:generate` needed: the parser is syntax-only (no `project` in
+      # parserOptions) and src/generated/** is ignored by the flat config.
+      - name: Lint
+        run: pnpm lint
+
   # -- Quality gate (aggregator; stable required-check name) ------------------
   quality-gate:
     name: quality-gate

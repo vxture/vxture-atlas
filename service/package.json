@@ -30,8 +30,11 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
     "@vitest/coverage-v8": "^4.1.8",
     "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
     "prisma": "^6.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"

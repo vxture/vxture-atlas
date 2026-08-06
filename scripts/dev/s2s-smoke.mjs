@@ -28,10 +28,24 @@ const IDP = process.env.IDP_BASE_URL ?? `${SCHEME}localhost:3090`;
 const WORKSPACE = "00000000-0000-4000-b000-000000003001";
 const TENANT = "00000000-0000-4000-b000-000000002001";
 
+// The platform repo is a sibling checkout, so its location is a property of the
+// machine, not of this repo. Default to the conventional layout and let
+// PLATFORM_ENV_FILE override it.
+const PLATFORM_ENV_FILE =
+  process.env.PLATFORM_ENV_FILE ?? path.resolve(root, "../../vxture/.env.local");
+
 function platformEnv(key) {
-  const raw = readFileSync("D:/MyWebSite/vxture/.env.local", "utf8");
+  let raw;
+  try {
+    raw = readFileSync(PLATFORM_ENV_FILE, "utf8");
+  } catch {
+    throw new Error(
+      `cannot read the platform env file at ${PLATFORM_ENV_FILE} - ` +
+        `set PLATFORM_ENV_FILE to your vxture-platform .env.local`,
+    );
+  }
   const m = new RegExp(`^${key}=(.+)$`, "m").exec(raw);
-  if (!m) throw new Error(`${key} not found in the platform env file`);
+  if (!m) throw new Error(`${key} not found in ${PLATFORM_ENV_FILE}`);
   return m[1].trim();
 }
 
