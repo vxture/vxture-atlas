@@ -9,10 +9,18 @@ name: sonar
 # (sonar-project.properties) takes precedence once SonarCloud sees a scanner
 # run for the repo.
 #
-# continue-on-error until the `atlas` project's GitHub binding is confirmed
-# live on the SonarCloud side (owner action on sonarcloud.io, out of this
-# repo's scope) - remove once confirmed, mirroring the same stopgap
-# vxture-platform's ci.yml uses for its own Sonar job.
+# This job reports its real exit status. It carried `continue-on-error: true`
+# from the repo split until 2026-08-06, on the stated assumption that the only
+# thing missing was the `atlas` project's GitHub binding. That assumption was
+# wrong, and the flag hid the evidence: every run since the split has failed
+# with `403 Forbidden` from api.sonarcloud.io while the job reported success.
+# The org-level SONAR_TOKEN (created 2026-07-14, visibility ALL) is rejected
+# outright - vxture-platform's own Sonar job fails identically, so this is an
+# org credential problem, not an atlas binding problem. See TD-027.
+#
+# A red job here blocks nothing (this is not one of the five required checks).
+# It is red so that "Atlas has never been scanned" is visible instead of
+# disguised, which is the entire failure mode the flag produced.
 
 on:
   pull_request:
@@ -60,7 +68,6 @@ jobs:
         run: pnpm --filter @atlas/service test:coverage
 
       - name: SonarQube Scan
-        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
