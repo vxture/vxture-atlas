@@ -192,9 +192,32 @@ from its caller, and the probe passes `test` against the all-zero sentinel - so
 operator self-checks stay out of tenant usage views, which was the urgent half.
 The chat and retry paths still pass nothing.
 
+**Confirmed against a running service** (2026-08-07, local smoke with a real
+IdP token and real Doubao calls): four successful chat records - three
+non-streaming, one streaming - all carry correct token counts and all carry
+`usage_type = NULL`. So the gap is exactly as described, and it is the only
+column missing: attribution, tokens and latency are all populated.
+
 **Recovery**: chat passes `normal`, retries pass `retry`, then
 `/tenancy/usage` can filter to `normal`/`retry`. Until then the filter cannot
 be turned on, because NULL would exclude all real traffic.
+
+## Streaming usage is metered - verified, not assumed
+
+Not a debt entry; recorded here because #91 left it open and the answer was
+previously unverifiable without a real upstream call.
+
+A streaming `/v1/chat` (`stream: true`) against the real Doubao model returned
+81 SSE frames ending in
+
+```
+data: {"type":"done","usage":{"promptTokens":40,"completionTokens":887,"totalTokens":927},...}
+```
+
+and `reqlog.request_records` recorded `input_tokens=40 output_tokens=887
+total_tokens=927 status=success` - identical, field for field. `config.wire`'s
+`streamUsage` descriptor is therefore correctly configured for this protocol:
+**streaming traffic is not silently unmetered.**
 
 
 ## TD-026
