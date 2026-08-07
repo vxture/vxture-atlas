@@ -286,14 +286,30 @@ verified by reading the project link back off the console:
 | vx-agent-ruralstrat | `vxture_vx-agent-ruralstrat` (already correct) |
 | demo-repository | `vxture_demo-repository` (already correct) |
 
+**The display name is the same trap, one layer down.** SonarCloud has no UI and
+no API to rename a project - `api/webservices/list` offers `update_key`,
+`update_visibility`, `create` and `delete`, and nothing else - because the
+scanner owns the name: `sonar.projectName` is written on every analysis. So a
+Sonar display name is not an import artifact to be corrected in the console, it
+is whatever the repo's own `sonar-project.properties` says.
+
+That is why `vxture-platform`'s project is called `Vxture`: its config declares
+it. And this repo declared `sonar.projectName=Atlas`, which was harmless only
+because no analysis has ever succeeded - the first successful scan would have
+renamed the project from `vxture-atlas` back to `Atlas`, undoing the alignment
+above. Now `vxture-atlas`.
+
 **Fixed here**: `continue-on-error` removed, so the job reports its real status;
-`sonar.projectKey` set to `vxture_vxture-atlas`.
+`sonar.projectKey` set to `vxture_vxture-atlas`; `sonar.projectName` set to
+`vxture-atlas`.
 
 **Breaks vxture-platform until it follows.** Its `sonar-project.properties`
-still declares `vxture_vxture`, which no longer exists. Out of this repo's write
-scope; filed on `vxture/vxture-platform#189`. Its scan is blocked on the quota
-anyway, so nothing runs in the meantime - but the change must land before the
-quota is restored, or the first scan creates a duplicate project.
+still declares `sonar.projectKey=vxture_vxture` (no longer exists) and
+`sonar.projectName=Vxture` (the reason its project is displayed under the
+pre-rename name). Out of this repo's write scope; filed on
+`vxture/vxture-platform#189`. Its scan is blocked on the quota anyway, so
+nothing runs in the meantime - but both lines must land before the quota is
+restored, or the first scan creates a duplicate project under the old key.
 
 **Recovery** - owner actions on sonarcloud.io, outside this repo's write scope:
 
