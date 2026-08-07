@@ -54,7 +54,12 @@ jobs:
   db-init:
     name: db-init
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Measured job execution, four most recent successful runs: 25s-45s. Kept
+    # deliberately loose at 10m rather than sized to the observation, because
+    # this job applies DDL and a future increment can legitimately be slow -
+    # unlike build/deploy, whose work does not grow with the schema. The
+    # approval wait is not counted (vxture-platform#191).
+    timeout-minutes: 10
     environment:
       name: production
     steps:
